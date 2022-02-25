@@ -1,5 +1,6 @@
 import { ListenerCollection } from '../../shared/listener-collection';
 import { HTMLIntegration } from './html';
+import { preserveScrollPosition } from './html-side-by-side';
 import { ImageTextLayer } from './image-text-layer';
 import { injectClient } from '../hypothesis-injector';
 
@@ -241,22 +242,27 @@ export class VitalSourceContentIntegration {
       const bookContainer = /** @type {HTMLElement} */ (
         bookImage.parentElement
       );
+      const textLayer = this._textLayer;
 
       // Update the PDF image size and alignment to fit alongside the sidebar.
       // `ImageTextLayer` will handle adjusting the text layer to match.
       const newWidth = window.innerWidth - layout.width;
       const minWidth = 250;
 
-      if (layout.expanded && newWidth > minWidth) {
-        // The VS book viewer sets `text-align: center` on the <body> element
-        // by default, which centers the book image in the page. When the sidebar
-        // is open we need the image to be left-aligned.
-        bookContainer.style.textAlign = 'left';
-        bookImage.style.width = `${newWidth}px`;
-      } else {
-        bookContainer.style.textAlign = '';
-        bookImage.style.width = '';
-      }
+      preserveScrollPosition(() => {
+        if (layout.expanded && newWidth > minWidth) {
+          // The VS book viewer sets `text-align: center` on the <body> element
+          // by default, which centers the book image in the page. When the sidebar
+          // is open we need the image to be left-aligned.
+          bookContainer.style.textAlign = 'left';
+          bookImage.style.width = `${newWidth}px`;
+        } else {
+          bookContainer.style.textAlign = '';
+          bookImage.style.width = '';
+        }
+        textLayer.updateSync();
+      });
+
       return layout.expanded;
     } else {
       return this._htmlIntegration.fitSideBySide(layout);
