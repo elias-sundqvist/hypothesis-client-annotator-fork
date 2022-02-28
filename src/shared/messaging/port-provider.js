@@ -185,15 +185,7 @@ export class PortProvider {
 
       const message = { frame1, frame2, type: 'offer', requestId };
 
-      // If the source window has an opaque origin [1], `event.origin` will be
-      // the string "null". This is not a legal value for the `targetOrigin`
-      // parameter to `postMessage`, so remap it to "*".
-      //
-      // [1] https://html.spec.whatwg.org/multipage/origin.html#origin.
-      //     Documents with opaque origins include file:// URLs and
-      //     sandboxed iframes.
-      const targetOrigin = origin === 'null' ? '*' : origin;
-      source.postMessage(message, targetOrigin, [messageChannel.port1]);
+      source.postMessage(message, '*', [messageChannel.port1]);
 
       if (frame2 === 'sidebar') {
         this._sidebarHostChannel.port2.postMessage(message, [
