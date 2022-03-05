@@ -67,7 +67,7 @@ export class PortProvider {
    *   match the origin.
    */
   constructor(hypothesisAppsOrigin) {
-    this._hypothesisAppsOrigin = hypothesisAppsOrigin;
+    this._hypothesisAppsOrigin = '*';
     this._emitter = new TinyEmitter();
 
     /**
