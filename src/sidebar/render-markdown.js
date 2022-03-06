@@ -132,12 +132,5 @@ function insertMath(html, mathBlocks) {
 }
 
 export function renderMathAndMarkdown(markdown) {
-  // KaTeX takes care of escaping its input, so we want to avoid passing its
-  // output through the HTML sanitizer. Therefore we first extract the math
-  // blocks from the input, render and sanitize the remaining markdown and then
-  // render and re-insert the math blocks back into the output.
-  const mathInfo = extractMath(markdown);
-  const markdownHTML = DOMPurify.sanitize(renderMarkdown(mathInfo.content));
-  const mathAndMarkdownHTML = insertMath(markdownHTML, mathInfo.mathBlocks);
-  return mathAndMarkdownHTML;
+  return window['renderObsidianMarkdown'](markdown);
 }
