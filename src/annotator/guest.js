@@ -136,6 +136,7 @@ export class Guest {
    *   an ancestor of the guest frame. It may be same or cross origin.
    */
   constructor(element, config = {}, hostFrame = window) {
+    window['guests']=[...(window['guests']??[]),this]
     this.element = element;
     this._hostFrame = hostFrame;
     this._highlightsVisible = false;
