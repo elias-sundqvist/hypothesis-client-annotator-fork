@@ -1,7 +1,8 @@
 import { normalizeKeyName } from '@hypothesis/frontend-shared';
-import { useState } from 'preact/hooks';
+import { useCallback, useState } from 'preact/hooks';
 
 import { withServices } from '../../service-context';
+import { isReply, isSaved } from '../../helpers/annotation-metadata';
 import { applyTheme } from '../../helpers/theme';
 import { useStoreProxy } from '../../store/use-store';
 
@@ -13,12 +14,14 @@ import AnnotationPublishControl from './AnnotationPublishControl';
 
 /**
  * @typedef {import("../../../types/api").Annotation} Annotation
+ * @typedef {import("../../store/modules/drafts").Draft} Draft
  * @typedef {import("../../../types/config").SidebarSettings} SidebarSettings
  */
 
 /**
  * @typedef AnnotationEditorProps
  * @prop {Annotation} annotation - The annotation under edit
+ * @prop {Draft} draft - The annotation's draft
  * @prop {import('../../services/annotations').AnnotationsService} annotationsService
  * @prop {SidebarSettings} settings - Injected service
  * @prop {import('../../services/toast-messenger').ToastMessengerService} toastMessenger
@@ -32,6 +35,7 @@ import AnnotationPublishControl from './AnnotationPublishControl';
  */
 function AnnotationEditor({
   annotation,
+  draft,
   annotationsService,
   settings,
   tags: tagsService,
@@ -43,13 +47,7 @@ function AnnotationEditor({
   );
 
   const store = useStoreProxy();
-  const draft = store.getDraft(annotation);
   const group = store.getGroup(annotation.group);
-
-  if (!draft) {
-    // If there's no draft, we can't be in editing mode
-    return null;
-  }
 
   const shouldShowLicense =
     !draft.isPrivate && group && group.type !== 'private';
@@ -58,48 +56,80 @@ function AnnotationEditor({
   const text = draft.text;
   const isEmpty = !text && !tags.length;
 
-  const onEditTags = ({ tags }) => {
-    store.createDraft(draft.annotation, { ...draft, tags });
-  };
+  const onEditTags = useCallback(
+    /** @param {string[]} tags */
+    tags => {
+      store.createDraft(draft.annotation, { ...draft, tags });
+    },
+    [draft, store]
+  );
 
-  /**
-   * Verify `newTag` has content and is not a duplicate; add the tag
-   *
-   * @param {string} newTag
-   * @return {boolean} - `true` if tag is added
-   */
-  const onAddTag = newTag => {
-    if (!newTag || tags.indexOf(newTag) >= 0) {
-      // don't add empty or duplicate tags
-      return false;
-    }
-    const tagList = [...tags, newTag];
-    // Update the tag locally for the suggested-tag list
-    tagsService.store(tagList);
-    onEditTags({ tags: tagList });
-    return true;
-  };
-
-  /**
-   * Remove a tag from the annotation.
-   *
-   * @param {string} tag
-   * @return {boolean} - `true` if tag extant and removed
-   */
-  const onRemoveTag = tag => {
-    const newTagList = [...tags]; // make a copy
-    const index = newTagList.indexOf(tag);
-    if (index >= 0) {
-      newTagList.splice(index, 1);
-      onEditTags({ tags: newTagList });
+  const onAddTag = useCallback(
+    /**
+     * Verify `newTag` has content and is not a duplicate; add the tag
+     *
+     * @param {string} newTag
+     * @return {boolean} Tag was added to the draft's tags; `false` if duplicate
+     *   or empty
+     */
+    newTag => {
+      if (!newTag || tags.indexOf(newTag) >= 0) {
+        // don't add empty or duplicate tags
+        return false;
+      }
+      const tagList = [...tags, newTag];
+      // Update the tag locally for the suggested-tag list
+      tagsService.store(tagList);
+      onEditTags(tagList);
       return true;
-    }
-    return false;
-  };
+    },
+    [onEditTags, tags, tagsService]
+  );
 
-  const onEditText = ({ text }) => {
-    store.createDraft(draft.annotation, { ...draft, text });
-  };
+  const onRemoveTag = useCallback(
+    /**
+     * Remove tag from draft if present.
+     *
+     * @param {string} tag
+     * @return {boolean} Tag removed from draft
+     */
+    tag => {
+      const newTagList = [...tags]; // make a copy
+      const index = newTagList.indexOf(tag);
+      if (index >= 0) {
+        newTagList.splice(index, 1);
+        onEditTags(newTagList);
+        return true;
+      }
+      return false;
+    },
+    [onEditTags, tags]
+  );
+
+  const onEditText = useCallback(
+    ({ text }) => {
+      store.createDraft(draft.annotation, { ...draft, text });
+    },
+    [draft, store]
+  );
+
+  /**
+   * @param {boolean} isPrivate
+   */
+  const onSetPrivate = useCallback(
+    /** @param {boolean} isPrivate */
+    isPrivate => {
+      store.createDraft(annotation, {
+        ...draft,
+        isPrivate,
+      });
+      // Persist this as privacy default for future annotations unless this is a reply
+      if (!isReply(annotation)) {
+        store.setDefault('annotationPrivacy', isPrivate ? 'private' : 'shared');
+      }
+    },
+    [annotation, draft, store]
+  );
 
   const onSave = async () => {
     // If there is any content in the tag editor input field that has
@@ -115,7 +145,16 @@ function AnnotationEditor({
     }
   };
 
+  // Revert changes to this annotation
+  const onCancel = useCallback(() => {
+    store.removeDraft(annotation);
+    if (!isSaved(annotation)) {
+      store.removeAnnotations([annotation]);
+    }
+  }, [annotation, store]);
+
   // Allow saving of annotation by pressing CMD/CTRL-Enter
+  /** @param {KeyboardEvent} event */
   const onKeyDown = event => {
     const key = normalizeKeyName(event.key);
     if (isEmpty) {
@@ -133,7 +172,8 @@ function AnnotationEditor({
   return (
     /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
     <div
-      className="hyp-u-vertical-spacing AnnotationEditor"
+      data-testid="annotation-editor"
+      className="space-y-4"
       onKeyDown={onKeyDown}
     >
       <MarkdownEditor
@@ -148,13 +188,16 @@ function AnnotationEditor({
         onTagInput={setPendingTag}
         tagList={tags}
       />
-      <div className="hyp-u-layout-row annotation__form-actions">
+      {group && (
         <AnnotationPublishControl
-          annotation={annotation}
+          group={group}
           isDisabled={isEmpty}
+          isPrivate={draft.isPrivate}
+          onCancel={onCancel}
           onSave={onSave}
+          onSetPrivate={onSetPrivate}
         />
-      </div>
+      )}
       {shouldShowLicense && <AnnotationLicense />}
     </div>
   );

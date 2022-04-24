@@ -1,6 +1,7 @@
 /* global PDFViewerApplication */
 
 import { warnOnce } from '../../shared/warn-once';
+import { translateOffsets } from '../util/normalize';
 import { matchQuote } from './match-quote';
 import { createPlaceholder } from './placeholder';
 import { TextPosition, TextRange } from './text-range';
@@ -16,7 +17,7 @@ import { TextQuoteAnchor } from './types';
  */
 
 /**
- * @typedef PdfTextRange
+ * @typedef PDFTextRange
  * @prop {number} pageIndex
  * @prop {object} anchor
  * @prop {number} anchor.start - Start character offset within the page's text
@@ -54,7 +55,7 @@ const pageTextCache = new Map();
  * to speed up re-anchoring an annotation that was previously anchored in the
  * current session.
  *
- * @type {Map<string, PdfTextRange>}
+ * @type {Map<string, PDFTextRange>}
  */
 const quotePositionCache = new Map();
 
@@ -98,7 +99,7 @@ function getNodeTextLayer(node) {
  *
  * @return {PDFViewer}
  */
-function getPdfViewer() {
+function getPDFViewer() {
   // @ts-ignore - TS doesn't know about PDFViewerApplication global.
   return PDFViewerApplication.pdfViewer;
 }
@@ -114,7 +115,7 @@ function getPdfViewer() {
  * @return {Promise<PDFPageView>}
  */
 async function getPageView(pageIndex) {
-  const pdfViewer = getPdfViewer();
+  const pdfViewer = getPDFViewer();
   let pageView = pdfViewer.getPageView(pageIndex);
 
   if (!pageView || !pageView.pdfPage) {
@@ -152,7 +153,7 @@ async function getPageView(pageIndex) {
  * Return true if the document has selectable text.
  */
 export async function documentHasText() {
-  const viewer = getPdfViewer();
+  const viewer = getPDFViewer();
   let hasText = false;
   for (let i = 0; i < viewer.pagesCount; i++) {
     const pageText = await getPageTextContent(i);
@@ -167,11 +168,9 @@ export async function documentHasText() {
 /**
  * Return the text of a given PDF page.
  *
- * The page text returned by this function should match the `textContent` of the
- * text layer element that PDF.js creates for rendered pages. This allows
- * offsets computed in the text to be reused as offsets within the text layer
- * element's content. This is important to create correct Ranges for anchored
- * selectors.
+ * The text returned by this function should match the `textContent` of the text
+ * layer element that PDF.js creates for rendered pages, with the exception
+ * that differences in whitespace are tolerated.
  *
  * @param {number} pageIndex
  * @return {Promise<string>}
@@ -187,21 +186,10 @@ function getPageTextContent(pageIndex) {
   const getPageText = async () => {
     const pageView = await getPageView(pageIndex);
     const textContent = await pageView.pdfPage.getTextContent({
+      // Deprecated option, set for compatibility with older PDF.js releases.
       normalizeWhitespace: true,
     });
-    let items = textContent.items;
-
-    // Versions of PDF.js < v2.9.359 did not create elements in the text layer for
-    // text items that contained all-whitespace strings. Newer versions (after
-    // https://github.com/mozilla/pdf.js/pull/13257) do. The same commit also
-    // introduced the `hasEOL` property to text items, so we use the absence
-    // of this property to determine if we need to filter out whitespace-only strings.
-    const excludeEmpty = items.length > 0 && !('hasEOL' in items[0]);
-    if (excludeEmpty) {
-      items = items.filter(it => /\S/.test(it.str));
-    }
-
-    return items.map(it => it.str).join('');
+    return textContent.items.map(it => it.str).join('');
   };
 
   // This function synchronously populates the cache with a promise so that
@@ -218,7 +206,7 @@ function getPageTextContent(pageIndex) {
  * @return {Promise<number>} - Offset of page's text within document text
  */
 async function getPageOffset(pageIndex) {
-  const viewer = getPdfViewer();
+  const viewer = getPDFViewer();
   if (pageIndex >= viewer.pagesCount) {
     /* istanbul ignore next - This should never be triggered */
     throw new Error('Invalid page index');
@@ -248,7 +236,7 @@ async function getPageOffset(pageIndex) {
  * @return {Promise<PageOffset>}
  */
 async function findPageByOffset(offset) {
-  const viewer = getPdfViewer();
+  const viewer = getPDFViewer();
 
   let pageStartOffset = 0;
   let pageEndOffset = 0;
@@ -268,6 +256,32 @@ async function findPageByOffset(offset) {
   // the last page.
   return { index: viewer.pagesCount - 1, offset: pageStartOffset, text };
 }
+
+/**
+ * Return true if `char` is an ASCII space.
+ *
+ * This is more efficient than `/\s/.test(char)` but does not handle Unicode
+ * spaces.
+ *
+ * @param {string} char
+ */
+function isSpace(char) {
+  switch (char) {
+    case ' ':
+    case '\f':
+    case '\n':
+    case '\r':
+    case '\t':
+    case '\v':
+    case '\u00a0': // nbsp
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** @param {string} char */
+const isNotSpace = char => !isSpace(char);
 
 /**
  * Locate the DOM Range which a position selector refers to.
@@ -295,21 +309,34 @@ async function anchorByPosition(pageIndex, start, end) {
     page.textLayer.renderingDone
   ) {
     // The page has been rendered. Locate the position in the text layer.
-    const root = page.textLayer.textLayerDiv;
-
-    // Do a sanity check to verify that the page text extracted by `getPageTextContent`
-    // matches the transparent text layer.
     //
-    // See https://github.com/hypothesis/client/issues/3674.
-    if (pageText !== root.textContent) {
-      /* istanbul ignore next */
+    // We allow for differences in whitespace between the text returned by
+    // `getPageTextContent` and the text layer content. Any other differences
+    // will cause mis-anchoring.
+
+    const root = page.textLayer.textLayerDiv;
+    const textLayerStr = /** @type {string} */ (root.textContent);
+
+    const [textLayerStart, textLayerEnd] = translateOffsets(
+      pageText,
+      textLayerStr,
+      start,
+      end,
+      isNotSpace
+    );
+
+    const textLayerQuote = stripSpaces(
+      textLayerStr.slice(textLayerStart, textLayerEnd)
+    );
+    const pageTextQuote = stripSpaces(pageText.slice(start, end));
+    if (textLayerQuote !== pageTextQuote) {
       warnOnce(
-        'PDF text layer content does not match page text. This will cause anchoring misalignment.'
+        'Text layer text does not match page text. Highlights will be mis-aligned.'
       );
     }
 
-    const startPos = new TextPosition(root, start);
-    const endPos = new TextPosition(root, end);
+    const startPos = new TextPosition(root, textLayerStart);
+    const endPos = new TextPosition(root, textLayerEnd);
     return new TextRange(startPos, endPos).toRange();
   }
 
@@ -323,29 +350,24 @@ async function anchorByPosition(pageIndex, start, end) {
 }
 
 /**
- * Return a string with spaces stripped and offsets into the input string.
+ * Return a string with spaces stripped.
  *
  * This function optimizes for performance of stripping the main space chars
  * that PDF.js generates over handling all kinds of whitespace that could
  * occur in a string.
  *
  * @param {string} str
- * @return {[string, number[]]}
  */
 function stripSpaces(str) {
-  const offsets = [];
   let stripped = '';
-
   for (let i = 0; i < str.length; i++) {
     const char = str[i];
-    if (char === ' ' || char === '\t' || char === '\n') {
+    if (isSpace(char)) {
       continue;
     }
     stripped += char;
-    offsets.push(i);
   }
-
-  return [stripped, offsets];
+  return stripped;
 }
 
 /**
@@ -365,7 +387,7 @@ function stripSpaces(str) {
 async function anchorQuote(quoteSelector, positionHint) {
   // Determine which pages to search and in what order. If we have a position
   // hint we'll try to use that. Otherwise we'll just search all pages in order.
-  const pageCount = getPdfViewer().pagesCount;
+  const pageCount = getPDFViewer().pagesCount;
   const pageIndexes = Array(pageCount)
     .fill(0)
     .map((_, i) => i);
@@ -388,33 +410,38 @@ async function anchorQuote(quoteSelector, positionHint) {
   }
 
   // Search pages for the best match, ignoring whitespace differences.
-  const [strippedPrefix] =
-    quoteSelector.prefix !== undefined ? stripSpaces(quoteSelector.prefix) : [];
-  const [strippedSuffix] =
-    quoteSelector.suffix !== undefined ? stripSpaces(quoteSelector.suffix) : [];
-  const [strippedQuote] = stripSpaces(quoteSelector.exact);
+  const strippedPrefix =
+    quoteSelector.prefix !== undefined
+      ? stripSpaces(quoteSelector.prefix)
+      : undefined;
+  const strippedSuffix =
+    quoteSelector.suffix !== undefined
+      ? stripSpaces(quoteSelector.suffix)
+      : undefined;
+  const strippedQuote = stripSpaces(quoteSelector.exact);
 
   let bestMatch;
   for (let page of pageIndexes) {
     const text = await getPageTextContent(page);
-    const [strippedText, offsets] = stripSpaces(text);
+    const strippedText = stripSpaces(text);
 
     // Determine expected offset of quote in current page based on position hint.
     let strippedHint;
     if (expectedPageIndex !== undefined && expectedOffsetInPage !== undefined) {
-      let hint;
       if (page < expectedPageIndex) {
-        hint = text.length; // Prefer matches closer to end of page.
+        strippedHint = strippedText.length; // Prefer matches closer to end of page.
       } else if (page === expectedPageIndex) {
-        hint = expectedOffsetInPage;
+        // Translate expected offset in whitespace-inclusive version of page
+        // text into offset in whitespace-stripped version of page text.
+        [strippedHint] = translateOffsets(
+          text,
+          strippedText,
+          expectedOffsetInPage,
+          expectedOffsetInPage,
+          isNotSpace
+        );
       } else {
-        hint = 0; // Prefer matches closer to start of page.
-      }
-
-      // Convert expected offset in original text into offset into stripped text.
-      strippedHint = 0;
-      while (strippedHint < offsets.length && offsets[strippedHint] < hint) {
-        ++strippedHint;
+        strippedHint = 0; // Prefer matches closer to start of page.
       }
     }
 
@@ -429,19 +456,20 @@ async function anchorQuote(quoteSelector, positionHint) {
     }
 
     if (!bestMatch || match.score > bestMatch.match.score) {
+      // Translate match offset from whitespace-stripped version of page text
+      // back to original text.
+      const [start, end] = translateOffsets(
+        strippedText,
+        text,
+        match.start,
+        match.end,
+        isNotSpace
+      );
       bestMatch = {
         page,
         match: {
-          start: offsets[match.start],
-
-          // `match.end` is the offset one past the last character of the match
-          // in the stripped text. We need the offset one past the corresponding
-          // character in the original text.
-          //
-          // We assume here that matches returned by `matchQuote` must have
-          // be non-empty, so `match.end` > `match.start`.
-          end: offsets[match.end - 1] + 1,
-
+          start,
+          end,
           score: match.score,
         },
       };

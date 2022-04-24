@@ -173,6 +173,12 @@ export function toggleSpanStyle(state, prefix, suffix, placeholder) {
   return newState;
 }
 
+/**
+ * Find the nearest line beginning searching backwards from `pos`.
+ *
+ * @param {string} str
+ * @param {number} pos
+ */
 function startOfLine(str, pos) {
   const start = str.lastIndexOf('\n', pos);
   if (start < 0) {
@@ -182,6 +188,12 @@ function startOfLine(str, pos) {
   }
 }
 
+/**
+ * Find the nearest line ending searching forwards from `pos`.
+ *
+ * @param {string} str
+ * @param {number} pos
+ */
 function endOfLine(str, pos) {
   const end = str.indexOf('\n', pos);
   if (end < 0) {

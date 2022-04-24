@@ -5,8 +5,6 @@ import thunk from 'redux-thunk';
 
 import { immutable } from '../util/immutable';
 
-import { createReducer, bindSelectors } from './util';
-
 /**
  * Helper that strips the first argument from a function type.
  *
@@ -58,16 +56,6 @@ import { createReducer, bindSelectors } from './util';
  */
 
 /**
- * Replace a type `T` with `Fallback` if `T` is `any`.
- *
- * Based on https://stackoverflow.com/a/61626123/434243.
- *
- * @template T
- * @template Fallback
- * @typedef {0 extends (1 & T) ? Fallback : T} DefaultIfAny
- */
-
-/**
  * Helper for getting the type of store produced by `createStore` when
  * passed a given module.
  *
@@ -77,7 +65,7 @@ import { createReducer, bindSelectors } from './util';
  *
  * @template T
  * @typedef {T extends Module<any, infer Actions, infer Selectors, infer RootSelectors> ?
- *   Store<Actions,Selectors,DefaultIfAny<RootSelectors,{}>> : never} StoreFromModule
+ *   Store<Actions,Selectors,RootSelectors> : never} StoreFromModule
  */
 
 /**
@@ -91,6 +79,92 @@ import { createReducer, bindSelectors } from './util';
  *   Actions &
  *   SelectorMethods<Selectors> &
  *   SelectorMethods<RootSelectors>} Store
+ */
+
+/**
+ * Create a Redux reducer from a store module's reducer map.
+ *
+ * @template State
+ * @param {ReducerMap<State>} reducers
+ */
+function createReducer(reducers) {
+  /** @param {redux.Action} action */
+  return (state = /** @type {State} */ ({}), action) => {
+    const reducer = reducers[action.type];
+    if (!reducer) {
+      return state;
+    }
+    const stateChanges = reducer(state, action);
+
+    // Some modules return an array rather than an object. They need to be
+    // handled differently so we don't convert them to an object.
+    if (Array.isArray(stateChanges)) {
+      return stateChanges;
+    }
+
+    return {
+      ...state,
+      ...stateChanges,
+    };
+  };
+}
+
+/**
+ * Convert a map of selector functions, which take a state value as their
+ * first argument, to a map of selector methods, which pre-fill the first
+ * argument by calling `getState()`.
+ *
+ * @template State
+ * @template {SelectorMap<State>} Selectors
+ * @param {Selectors} selectors
+ * @param {() => State} getState
+ * @return {SelectorMethods<Selectors>}
+ */
+function bindSelectors(selectors, getState) {
+  /** @type {Record<string, Function>} */
+  const boundSelectors = {};
+  for (let [name, selector] of Object.entries(selectors)) {
+    boundSelectors[name] = /** @param {any[]} args */ (...args) =>
+      selector(getState(), ...args);
+  }
+  return /** @type {SelectorMethods<Selectors>} */ (boundSelectors);
+}
+
+/**
+ * `Object.assign` wrapper that checks for overwriting properties in debug builds.
+ *
+ * @template T
+ * @template U
+ * @param {T} target
+ * @param {U} source
+ */
+function assignOnce(target, source) {
+  if (process.env.NODE_ENV !== 'production') {
+    for (let key of Object.keys(source)) {
+      if (key in target) {
+        throw new Error(`Cannot add duplicate '${key}' property to object`);
+      }
+    }
+  }
+  return Object.assign(target, source);
+}
+
+/**
+ * @template T
+ * @typedef {{[K in keyof T]: (x: T[K]) => void }} MapContravariant
+ */
+
+/**
+ * Utility that turns a tuple type `[A, B, C]` into an intersection `A & B & C`.
+ *
+ * The implementation is magic adapted from
+ * https://github.com/microsoft/TypeScript/issues/28323. Roughly speaking it
+ * works by computing a type that could be assigned to any position in the
+ * tuple, which must be the intersection of all the tuple element types.
+ *
+ * @template T
+ * @template {Record<number, unknown>} [Temp=MapContravariant<T>]
+ * @typedef {Temp[number] extends (x: infer U) => unknown ? U : never} TupleToIntersection
  */
 
 /**
@@ -117,43 +191,24 @@ import { createReducer, bindSelectors } from './util';
  * `use-store.js`. This returns a proxy which enables UI components to observe
  * what store state a component depends upon and re-render when it changes.
  *
- * @param {Module<any,any,any,any>[]} modules
+ * @template {readonly Module<any,any,any,any>[]} Modules
+ * @param {Modules} modules
  * @param {any[]} [initArgs] - Arguments to pass to each state module's `initialState` function
  * @param {any[]} [middleware] - List of additional Redux middlewares to use
- * @return Store<any,any,any>
+ * @return {StoreFromModule<TupleToIntersection<Modules>>}
  */
 export function createStore(modules, initArgs = [], middleware = []) {
-  // Create the initial state and state update function.
-
-  // Namespaced objects for initial states.
+  /** @type {Record<string, unknown>} */
   const initialState = {};
+  for (let module of modules) {
+    initialState[module.namespace] = module.initialState(...initArgs);
+  }
 
-  /**
-   * Namespaced reducers from each module.
-   * @type {import("redux").ReducersMapObject} allReducers
-   */
+  /** @type {redux.ReducersMapObject} */
   const allReducers = {};
-  // Namespaced selectors from each module.
-  const allSelectors = {};
-
-  // Iterate over each module and prep each module's:
-  //    1. state
-  //    2. reducers
-  //    3. selectors
-  //
-  modules.forEach(module => {
-    if (module.namespace) {
-      initialState[module.namespace] = module.initialState(...initArgs);
-
-      allReducers[module.namespace] = createReducer(module.reducers);
-      allSelectors[module.namespace] = {
-        selectors: module.selectors,
-        rootSelectors: module.rootSelectors || {},
-      };
-    } else {
-      console.warn('Store module does not specify a namespace', module);
-    }
-  });
+  for (let module of modules) {
+    allReducers[module.namespace] = createReducer(module.reducers);
+  }
 
   const defaultMiddleware = [
     // The `thunk` middleware handles actions which are functions.
@@ -164,7 +219,7 @@ export function createStore(modules, initArgs = [], middleware = []) {
 
   const enhancer = redux.applyMiddleware(...defaultMiddleware, ...middleware);
 
-  // Create the combined reducer from the reducers for each module.
+  // Combine the reducers for all modules
   let reducer = redux.combineReducers(allReducers);
 
   // In debug builds, freeze the new state after each action to catch any attempts
@@ -174,21 +229,55 @@ export function createStore(modules, initArgs = [], middleware = []) {
     reducer = (state, action) => immutable(originalReducer(state, action));
   }
 
-  // Create the store.
   const store = redux.createStore(reducer, initialState, enhancer);
 
-  // Add actions and selectors as methods to the store.
-  const actions = Object.assign({}, ...modules.map(m => m.actionCreators));
-  const boundActions = redux.bindActionCreators(actions, store.dispatch);
-  const boundSelectors = bindSelectors(allSelectors, store.getState);
+  // Add action creators as methods to the store.
+  /** @type {Record<string, (...args: any[]) => redux.Action>} */
+  const actionCreators = {};
+  for (let module of modules) {
+    assignOnce(actionCreators, module.actionCreators);
+  }
+  const actionMethods = redux.bindActionCreators(
+    actionCreators,
+    store.dispatch
+  );
+  Object.assign(store, actionMethods);
 
-  Object.assign(store, boundActions, boundSelectors);
+  // Add selectors as methods to the store.
+  const selectorMethods = {};
+  for (let module of modules) {
+    const { namespace, selectors, rootSelectors } = module;
+    const boundSelectors = bindSelectors(
+      selectors,
+      () => store.getState()[namespace]
+    );
+    assignOnce(selectorMethods, boundSelectors);
 
-  return store;
+    if (rootSelectors) {
+      const boundRootSelectors = bindSelectors(rootSelectors, store.getState);
+      assignOnce(selectorMethods, boundRootSelectors);
+    }
+  }
+  Object.assign(store, selectorMethods);
+
+  return /** @type {any} */ (store);
 }
 
-// The properties of the `config` argument to `createStoreModule` below are
-// declared inline due to https://github.com/microsoft/TypeScript/issues/43403.
+/**
+ * Helper for creating an action which checks that the type of the action's
+ * payload is compatible with what the reducer expects.
+ *
+ * @template {ReducerMap<any>} Reducers
+ * @template {keyof Reducers} Type
+ * @param {Reducers} reducers - The map of reducer functions from a store module
+ * @param {Type} type - The name of a specific reducer in `reducers`
+ * @param {Parameters<Reducers[Type]>[1]} payload - The fields of the action
+ *   except for `type`. Pass `undefined` if the reducer doesn't need an action payload.
+ */
+export function makeAction(reducers, type, payload) {
+  // nb. `reducers` is not used here. It exists purely for type inference.
+  return { type, ...payload };
+}
 
 /**
  * Create a store module that can be passed to `createStore`.
@@ -196,7 +285,7 @@ export function createStore(modules, initArgs = [], middleware = []) {
  * @template State
  * @template Actions
  * @template {SelectorMap<State>} Selectors
- * @template RootSelectors
+ * @template [RootSelectors={}]
  * @param {State | ((...args: any[]) => State)} initialState
  * @param {object} config
  *   @param {string} config.namespace -

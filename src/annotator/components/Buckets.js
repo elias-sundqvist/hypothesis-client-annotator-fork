@@ -11,7 +11,7 @@ import classnames from 'classnames';
  * the sidebar.
  *
  * @param {object} props
- *   @prop {Children} props.children
+ *   @param {Children} props.children
  */
 function BucketList({ children }) {
   return (
@@ -23,7 +23,7 @@ function BucketList({ children }) {
         // https://github.com/hypothesis/client/pull/2750
         'absolute w-[23px] left-[-22px] h-full',
         // The background is set to low opacity when the sidebar is collapsed.
-        'bg-grey-2 annotator-collapsed:bg-black/[.08]',
+        'bg-grey-2 sidebar-collapsed:bg-black/[.08]',
         // Disable pointer events along the sidebar itself; re-enable them in
         // bucket indicator buttons
         'pointer-events-none'
@@ -38,8 +38,8 @@ function BucketList({ children }) {
  * Render a vertically-positioned bucket-list item.
  *
  * @param {object} props
- *  @prop {Children} props.children
- *  @prop {number} props.topPosition - The vertical top position, in pixels,
+ *  @param {Children} props.children
+ *  @param {number} props.topPosition - The vertical top position, in pixels,
  *   for this bucket item relative to the top of the containing BucketList
  */
 function BucketItem({ children, topPosition }) {
@@ -60,6 +60,10 @@ function BucketItem({ children, topPosition }) {
 /**
  * A list of buckets, including up and down navigation (when applicable) and
  * on-screen buckets
+ *
+ * This component and its buttons are sized with absolute units such that they
+ * don't scale with changes to the host page's root font size. They will still
+ * properly scale with user/browser zooming.
  *
  * @param {object} props
  *   @param {Bucket} props.above

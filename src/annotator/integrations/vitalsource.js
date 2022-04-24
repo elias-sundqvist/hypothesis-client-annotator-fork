@@ -1,5 +1,7 @@
 import { ListenerCollection } from '../../shared/listener-collection';
+import { onDocumentReady } from '../frame-observer';
 import { HTMLIntegration } from './html';
+import { preserveScrollPosition } from './html-side-by-side';
 import { ImageTextLayer } from './image-text-layer';
 import { injectClient } from '../hypothesis-injector';
 
@@ -10,6 +12,11 @@ import { injectClient } from '../hypothesis-injector';
  * @typedef {import('../../types/annotator').Selector} Selector
  * @typedef {import('../../types/annotator').SidebarLayout} SidebarLayout
  */
+
+// When activating side-by-side mode for VitalSource PDF documents, make sure
+// at least this much space (in pixels) is left for the PDF document. Any
+// smaller and it feels unreadable or too-zoomed-out
+const MIN_CONTENT_WIDTH = 480;
 
 /**
  * Return the custom DOM element that contains the book content iframe.
@@ -42,6 +49,21 @@ export function vitalSourceFrameRole(window_ = window) {
 /**
  * VitalSourceInjector runs in the book container frame and loads the client into
  * book content frames.
+ *
+ * The frame structure of the VitalSource book reader looks like this:
+ *
+ * [VitalSource top frame - bookshelf.vitalsource.com]
+ *   |
+ *   [Book container frame - jigsaw.vitalsource.com]
+ *     |
+ *     [Book content frame - jigsaw.vitalsource.com]
+ *
+ * The Hypothesis client can be initially loaded in the container frame or the
+ * content frame. As the user navigates around the book, the container frame
+ * remains the same but the content frame is swapped out. When used in the
+ * container frame, this class handles initial injection of the client as a
+ * guest in the current content frame, and re-injecting the client into new
+ * content frames when they are created.
  */
 export class VitalSourceInjector {
   /**
@@ -57,35 +79,6 @@ export class VitalSourceInjector {
     /** @type {WeakSet<HTMLIFrameElement>} */
     const contentFrames = new WeakSet();
 
-    /** @param {HTMLIFrameElement} frame */
-    const injectIfContentReady = frame => {
-      // Check if this frame contains decoded ebook content. If the document has
-      // not yet finished loading, then we rely on this function being called
-      // again once loading completes.
-
-      const body = frame.contentDocument?.body;
-      const isBookContent =
-        body &&
-        // Check that this is not the blank document which is displayed in
-        // brand new iframes before any of their content has loaded.
-        body.children.length > 0 &&
-        // Check that this is not the temporary page containing encrypted and
-        // invisible book content, which is replaced with the real content after
-        // a form submission. These pages look something like:
-        //
-        // ```
-        // <html>
-        //   <title>content</title>
-        //   <body><div id="page-content">{ Base64 encoded data }</div></body>
-        // </html>
-        // ```
-        !body.querySelector('#page-content');
-
-      if (isBookContent) {
-        injectClient(frame, config);
-      }
-    };
-
     const shadowRoot = /** @type {ShadowRoot} */ (bookElement.shadowRoot);
     const injectClientIntoContentFrame = () => {
       const frame = shadowRoot.querySelector('iframe');
@@ -94,10 +87,25 @@ export class VitalSourceInjector {
         return;
       }
       contentFrames.add(frame);
+      onDocumentReady(frame, (err, document_) => {
+        const body = document_?.body;
+        const isBookContent =
+          body &&
+          // Check that this is not the temporary page containing encrypted and
+          // invisible book content, which is replaced with the real content after
+          // a form submission. These pages look something like:
+          //
+          // ```
+          // <html>
+          //   <title>content</title>
+          //   <body><div id="page-content">{ Base64 encoded data }</div></body>
+          // </html>
+          // ```
+          !body.querySelector('#page-content');
 
-      injectIfContentReady(frame);
-      frame.addEventListener('load', () => {
-        injectIfContentReady(frame);
+        if (isBookContent) {
+          injectClient(frame, config);
+        }
       });
     };
 
@@ -147,6 +155,38 @@ function getPDFPageImage() {
 }
 
 /**
+ * Fix how a VitalSource book content frame scrolls, so that various related
+ * Hypothesis behaviors (the bucket bar, scrolling annotations into view) work
+ * as intended.
+ *
+ * Some VitalSource books (PDFs) make content scrolling work by making the
+ * content iframe really tall and having the parent frame scroll. This stops the
+ * Hypothesis bucket bar and scrolling annotations into view from working.
+ *
+ * @param {HTMLIFrameElement} frame
+ */
+function makeContentFrameScrollable(frame) {
+  if (frame.getAttribute('scrolling') !== 'no') {
+    // This is a book (eg. EPUB) where the workaround is not required.
+    return;
+  }
+
+  // Override inline styles of iframe (hence `!important`). The iframe lives
+  // in Shadow DOM, so the element styles won't affect the rest of the app.
+  const style = document.createElement('style');
+  style.textContent = `iframe { height: 100% !important; }`;
+  frame.insertAdjacentElement('beforebegin', style);
+
+  const removeScrollingAttr = () => frame.removeAttribute('scrolling');
+  removeScrollingAttr();
+
+  // Sometimes the attribute gets re-added by VS. Remove it if that
+  // happens.
+  const attrObserver = new MutationObserver(removeScrollingAttr);
+  attrObserver.observe(frame, { attributes: true });
+}
+
+/**
  * Integration for the content frame in VitalSource's Bookshelf ebook reader.
  *
  * This integration delegates to the standard HTML integration for most
@@ -155,6 +195,8 @@ function getPDFPageImage() {
  *  - Customize the document URI and metadata that is associated with annotations
  *  - Prevent VitalSource's built-in selection menu from getting in the way
  *    of the adder.
+ *  - Create a hidden text layer in PDF-based books, so the user can select text
+ *    in the PDF image. This is similar to what PDF.js does for us in PDFs.
  *
  * @implements {Integration}
  */
@@ -172,16 +214,22 @@ export class VitalSourceContentIntegration {
     // from showing its native selection menu, which obscures the client's
     // annotation toolbar.
     //
-    // VitalSource only checks the selection on the `mouseup` and `mouseout` events,
-    // but we also need to stop `mousedown` to prevent the client's `SelectionObserver`
-    // from thinking that the mouse is held down when a selection change occurs.
-    // This has the unwanted side effect of allowing the adder to appear while
-    // dragging the mouse.
-    const stopEvents = ['mousedown', 'mouseup', 'mouseout'];
+    // To avoid interfering with the client's own selection handling, this
+    // event blocking must happen at the same level or higher in the DOM tree
+    // than where SelectionObserver listens.
+    const stopEvents = ['mouseup', 'mousedown', 'mouseout'];
     for (let event of stopEvents) {
       this._listeners.add(document.documentElement, event, e => {
         e.stopPropagation();
       });
+    }
+
+    // Install scrolling workaround for PDFs. We do this in the content frame
+    // so that it works whether Hypothesis is loaded directly into the content
+    // frame or injected by VitalSourceInjector from the parent frame.
+    const frame = /** @type {HTMLIFrameElement|null} */ (window.frameElement);
+    if (frame) {
+      makeContentFrameScrollable(frame);
     }
 
     // If this is a PDF, create the hidden text layer above the rendered PDF
@@ -192,14 +240,17 @@ export class VitalSourceContentIntegration {
     const pageData = /** @type {any} */ (window).innerPageData;
 
     if (bookImage && pageData) {
+      const charRects = pageData.glyphs.glyphs.map(glyph => {
+        const left = glyph.l / 100;
+        const right = glyph.r / 100;
+        const top = glyph.t / 100;
+        const bottom = glyph.b / 100;
+        return new DOMRect(left, top, right - left, bottom - top);
+      });
+
       this._textLayer = new ImageTextLayer(
         bookImage,
-        pageData.glyphs.glyphs.map(glyph => ({
-          left: glyph.l / 100,
-          right: glyph.r / 100,
-          top: glyph.t / 100,
-          bottom: glyph.b / 100,
-        })),
+        charRects,
         pageData.words
       );
 
@@ -246,28 +297,37 @@ export class VitalSourceContentIntegration {
    * @param {SidebarLayout} layout
    */
   fitSideBySide(layout) {
+    // For PDF books, handle side-by-side mode in this integration. For EPUBs,
+    // delegate to the HTML integration.
     const bookImage = getPDFPageImage();
-
     if (bookImage && this._textLayer) {
       const bookContainer = /** @type {HTMLElement} */ (
         bookImage.parentElement
       );
+      const textLayer = this._textLayer;
 
       // Update the PDF image size and alignment to fit alongside the sidebar.
       // `ImageTextLayer` will handle adjusting the text layer to match.
       const newWidth = window.innerWidth - layout.width;
-      const minWidth = 250;
 
-      if (layout.expanded && newWidth > minWidth) {
-        // The VS book viewer sets `text-align: center` on the <body> element
-        // by default, which centers the book image in the page. When the sidebar
-        // is open we need the image to be left-aligned.
-        bookContainer.style.textAlign = 'left';
-        bookImage.style.width = `${newWidth}px`;
-      } else {
-        bookContainer.style.textAlign = '';
-        bookImage.style.width = '';
-      }
+      preserveScrollPosition(() => {
+        if (layout.expanded && newWidth > MIN_CONTENT_WIDTH) {
+          // The VS book viewer sets `text-align: center` on the <body> element
+          // by default, which centers the book image in the page. When the sidebar
+          // is open we need the image to be left-aligned.
+          bookContainer.style.textAlign = 'left';
+          bookImage.style.width = `${newWidth}px`;
+        } else {
+          bookContainer.style.textAlign = '';
+          bookImage.style.width = '';
+        }
+
+        // Update text layer to match new image dimensions immediately. This
+        // is needed so that `preserveScrollPosition` can see how the content
+        // has shifted when this callback returns.
+        textLayer.updateSync();
+      });
+
       return layout.expanded;
     } else {
       return this._htmlIntegration.fitSideBySide(layout);

@@ -1,5 +1,3 @@
-import scrollIntoView from 'scroll-into-view';
-
 import { anchor, describe } from '../anchoring/html';
 
 import { HTMLMetadata } from './html-metadata';
@@ -7,12 +5,18 @@ import {
   guessMainContentArea,
   preserveScrollPosition,
 } from './html-side-by-side';
+import { scrollElementIntoView } from '../util/scroll';
 
 /**
  * @typedef {import('../../types/annotator').Anchor} Anchor
  * @typedef {import('../../types/annotator').Integration} Integration
  * @typedef {import('../../types/annotator').SidebarLayout} SidebarLayout
  */
+
+// When activating side-by-side mode, make sure there is at least this amount
+// of space (in pixels) left for the document's content. Any narrower and the
+// content line lengths and scale are too short to be readable.
+const MIN_HTML_WIDTH = 480;
 
 /**
  * Document type integration for ordinary web pages.
@@ -55,11 +59,14 @@ export class HTMLIntegration {
    * @param {SidebarLayout} layout
    */
   fitSideBySide(layout) {
+    const maximumWidthToFit = window.innerWidth - layout.width;
+    const active = layout.expanded && maximumWidthToFit >= MIN_HTML_WIDTH;
+
     if (!this.sideBySideEnabled) {
       return false;
     }
 
-    if (layout.expanded) {
+    if (active) {
       this._activateSideBySide(layout.width);
       return true;
     } else {
@@ -110,9 +117,21 @@ export class HTMLIntegration {
     const padding = 12;
     const rightMargin = sidebarWidth + padding;
 
+    /** @param {HTMLElement} element */
+    const computeLeftMargin = element =>
+      parseInt(window.getComputedStyle(element).marginLeft, 10);
+
     preserveScrollPosition(() => {
       // nb. Adjusting the body size this way relies on the page not setting a
       // width on the body. For sites that do this won't work.
+
+      // Remove any margins we've previously set
+      document.body.style.marginLeft = '';
+      document.body.style.marginRight = '';
+
+      // Keep track of what left margin would be naturally without right margin set
+      const beforeBodyLeft = computeLeftMargin(document.body);
+
       document.body.style.marginRight = `${rightMargin}px`;
 
       const contentArea = guessMainContentArea(document.body);
@@ -126,6 +145,15 @@ export class HTMLIntegration {
         if (freeSpace > 0) {
           const adjustedMargin = Math.max(0, rightMargin - freeSpace);
           document.body.style.marginRight = `${adjustedMargin}px`;
+        }
+
+        // Changes to right margin can affect left margin in cases where body
+        // has `margin:auto`. It's OK to move the body to the left to make
+        // space, but avoid moving it to the right.
+        // See https://github.com/hypothesis/client/issues/4280
+        const afterBodyLeft = computeLeftMargin(document.body);
+        if (afterBodyLeft > beforeBodyLeft) {
+          document.body.style.marginLeft = `${beforeBodyLeft}px`;
         }
 
         // If the main content appears to be right up against the edge of the
@@ -161,10 +189,11 @@ export class HTMLIntegration {
   /**
    * @param {Anchor} anchor
    */
-  scrollToAnchor(anchor) {
-    const highlights = /** @type {Element[]} */ (anchor.highlights);
-    return new Promise(resolve => {
-      scrollIntoView(highlights[0], resolve);
-    });
+  async scrollToAnchor(anchor) {
+    const highlight = anchor.highlights?.[0];
+    if (!highlight) {
+      return;
+    }
+    await scrollElementIntoView(highlight);
   }
 }

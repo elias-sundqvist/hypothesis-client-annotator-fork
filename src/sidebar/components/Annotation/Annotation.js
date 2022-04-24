@@ -1,8 +1,8 @@
-import { Actions } from '@hypothesis/frontend-shared';
+import { Actions, Spinner } from '@hypothesis/frontend-shared';
 import classnames from 'classnames';
 
 import { useStoreProxy } from '../../store/use-store';
-import { isSaved, quote } from '../../helpers/annotation-metadata';
+import { isOrphan, isSaved, quote } from '../../helpers/annotation-metadata';
 import { withServices } from '../../service-context';
 
 import AnnotationActionBar from './AnnotationActionBar';
@@ -17,6 +17,31 @@ import AnnotationReplyToggle from './AnnotationReplyToggle';
  * @typedef {import("../../../types/api").SavedAnnotation} SavedAnnotation
  * @typedef {import('../../../types/api').Group} Group
  */
+
+function SavingMessage() {
+  return (
+    <div
+      className={classnames(
+        'flex grow justify-end items-center gap-x-1',
+        // Make sure height matches that of action-bar icons so that there
+        // isn't a height change when transitioning in and out of saving state
+        'h-8 touch:h-touch-minimum'
+      )}
+      data-testid="saving-message"
+    >
+      <Spinner
+        classes={classnames(
+          'text-xl',
+          // Slowly fade in the Spinner such that it only shows up if
+          // the saving is slow
+          'animate-fade-in-slow'
+        )}
+        size="small"
+      />
+      <div className="text-color-text-light font-medium">Saving...</div>
+    </div>
+  );
+}
 
 /**
  * @typedef AnnotationProps
@@ -49,28 +74,27 @@ function Annotation({
 
   const store = useStoreProxy();
 
-  const hasQuote = annotation && !!quote(annotation);
+  const draft = annotation && store.getDraft(annotation);
+
+  const annotationQuote = annotation ? quote(annotation) : null;
   const isFocused = annotation && store.isAnnotationFocused(annotation.$tag);
   const isSaving = annotation && store.isSavingAnnotation(annotation);
-  const isEditing = annotation && !!store.getDraft(annotation) && !isSaving;
+  const isEditing = annotation && !!draft && !isSaving;
 
   const userid = store.profile().userid;
-  const showActions = !isSaving && !isEditing;
-  const showReplyToggle = !isReply && !hasAppliedFilter && replyCount > 0;
+  const showActions =
+    annotation && !isSaving && !isEditing && isSaved(annotation);
+  const showReplyToggle =
+    !isReply && !isEditing && !hasAppliedFilter && replyCount > 0;
 
   const onReply = () => {
-    if (annotation && isSaved(annotation)) {
+    if (annotation && isSaved(annotation) && userid) {
       annotationsService.reply(annotation, userid);
     }
   };
 
   return (
-    <article
-      className={classnames('hyp-u-vertical-spacing', {
-        'is-collapsed': threadIsCollapsed,
-        'is-focused': isFocused,
-      })}
-    >
+    <article className="space-y-4">
       {annotation && (
         <>
           <AnnotationHeader
@@ -80,15 +104,21 @@ function Annotation({
             threadIsCollapsed={threadIsCollapsed}
           />
 
-          {hasQuote && (
-            <AnnotationQuote annotation={annotation} isFocused={isFocused} />
+          {annotationQuote && (
+            <AnnotationQuote
+              quote={annotationQuote}
+              isFocused={isFocused}
+              isOrphan={isOrphan(annotation)}
+            />
           )}
 
           {!isCollapsedReply && !isEditing && (
             <AnnotationBody annotation={annotation} />
           )}
 
-          {isEditing && <AnnotationEditor annotation={annotation} />}
+          {isEditing && (
+            <AnnotationEditor annotation={annotation} draft={draft} />
+          )}
         </>
       )}
 
@@ -99,32 +129,20 @@ function Annotation({
       )}
 
       {!isCollapsedReply && (
-        <footer>
-          <div className="hyp-u-layout-row">
-            {showReplyToggle && (
-              <AnnotationReplyToggle
-                onToggleReplies={onToggleReplies}
-                replyCount={replyCount}
-                threadIsCollapsed={threadIsCollapsed}
-              />
-            )}
-            {isSaving && (
-              <div
-                className="hyp-u-layout-row--justify-right hyp-u-stretch"
-                data-testid="saving-message"
-              >
-                Saving...
-              </div>
-            )}
-            {annotation && showActions && isSaved(annotation) && (
-              <Actions classes="hyp-u-stretch">
-                <AnnotationActionBar
-                  annotation={annotation}
-                  onReply={onReply}
-                />
-              </Actions>
-            )}
-          </div>
+        <footer className="flex items-center">
+          {showReplyToggle && (
+            <AnnotationReplyToggle
+              onToggleReplies={onToggleReplies}
+              replyCount={replyCount}
+              threadIsCollapsed={threadIsCollapsed}
+            />
+          )}
+          {isSaving && <SavingMessage />}
+          {showActions && (
+            <Actions classes="grow">
+              <AnnotationActionBar annotation={annotation} onReply={onReply} />
+            </Actions>
+          )}
         </footer>
       )}
     </article>

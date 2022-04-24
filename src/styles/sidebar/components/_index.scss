@@ -7,24 +7,14 @@
 // Extensions and overrides to patterns from `frontend-shared`
 @use '../../frontend-shared';
 
-// Local patterns
-@use '../../patterns';
-
-// Components
+// UI (Preact) Components
 // ----------
-@use './AnnotationPublishControl';
-@use './AnnotationShareControl';
 @use './AutocompleteList';
-@use './Excerpt';
 @use './FilterSelect';
 @use './FilterStatus';
 @use './GroupList';
 @use './GroupListItem';
-@use './HypothesisApp';
 @use './LaunchErrorPanel';
-@use './LoggedOutMessage';
-@use './MarkdownEditor';
-@use './MarkdownView';
 @use './Menu';
 @use './MenuItem';
 @use './MenuSection';
@@ -33,12 +23,31 @@
 @use './PaginationNavigation';
 @use './SelectionTabs';
 @use './SearchInput';
-@use './ShareLinks';
-@use './TagEditor';
-@use './TagList';
+@use './StyledText';
 @use './Thread';
 @use './ThreadCard';
 @use './ThreadList';
 @use './ToastMessages';
-@use './TopBar';
 @use './VersionInfo';
+
+// TODO: Evaluate all classes below after components have been converted to
+// Tailwind. If retaining, put them in @layer components after `frontend-shared`
+//  component styles have been converted to Tailwind (and are contained in the
+// components layer themselves). They need to come after shared-component
+// styles in the output stylesheet.
+
+// Applies to <Link>
+.p-muted-link {
+  @apply text-color-text-light hover:text-color-text-light hover:underline;
+}
+
+// Applies to any text: strikeout effect
+.p-redacted-text {
+  @apply line-through grayscale contrast-50 text-color-text-light;
+}
+
+// Disable scroll anchoring as it interferes with `ThreadList` and
+// `visible-threads` calculations and can cause a render loop
+.js-thread-list-scroll-root {
+  overflow-anchor: none;
+}

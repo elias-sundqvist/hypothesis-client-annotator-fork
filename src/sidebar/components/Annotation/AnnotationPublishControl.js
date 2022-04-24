@@ -1,8 +1,6 @@
 import { Icon, LabeledButton } from '@hypothesis/frontend-shared';
+import classnames from 'classnames';
 
-import { useStoreProxy } from '../../store/use-store';
-import { isNew, isReply } from '../../helpers/annotation-metadata';
-import { isShared } from '../../helpers/permissions';
 import { withServices } from '../../service-context';
 import { applyTheme } from '../../helpers/theme';
 
@@ -10,16 +8,19 @@ import Menu from '../Menu';
 import MenuItem from '../MenuItem';
 
 /**
- * @typedef {import('../../../types/api').Annotation} Annotation
+ * @typedef {import('../../../types/api').Group} Group
  * @typedef {import('../../../types/config').SidebarSettings} SidebarSettings
  */
 
 /**
  * @typedef AnnotationPublishControlProps
- * @prop {Annotation} annotation
+ * @prop {Group} group - The group this annotation or draft would publish to
  * @prop {boolean} [isDisabled]
  *  - Should the save button be disabled? Hint: it will be if the annotation has no content
- * @prop {() => any} onSave - Callback for save button click
+ * @prop {boolean} isPrivate - Annotation or draft is "Only Me"
+ * @prop {() => void} onCancel - Callback for cancel button click
+ * @prop {() => void} onSave - Callback for save button click
+ * @prop {(isPrivate: boolean) => void} onSetPrivate - Callback for save button click
  * @prop {SidebarSettings} settings - Injected service
  */
 
@@ -31,57 +32,33 @@ import MenuItem from '../MenuItem';
  * @param {AnnotationPublishControlProps} props
  */
 function AnnotationPublishControl({
-  annotation,
+  group,
   isDisabled,
+  isPrivate,
+  onCancel,
   onSave,
+  onSetPrivate,
   settings,
 }) {
-  const store = useStoreProxy();
-  const draft = store.getDraft(annotation);
-  const group = store.getGroup(annotation.group);
-
-  if (!group) {
-    // If there is no group, then don't render anything as a missing group
-    // may mean the group is not loaded yet.
-    return null;
-  }
-
-  const isPrivate = draft ? draft.isPrivate : !isShared(annotation.permissions);
-
-  const publishDestination = isPrivate ? 'Only Me' : group.name;
-
-  // Revert changes to this annotation
-  const onCancel = () => {
-    store.removeDraft(annotation);
-    if (isNew(annotation)) {
-      store.removeAnnotations([annotation]);
-    }
-  };
-
-  const onSetPrivacy = level => {
-    store.createDraft(annotation, { ...draft, isPrivate: level === 'private' });
-    // Persist this as privacy default for future annotations unless this is a reply
-    if (!isReply(annotation)) {
-      store.setDefault('annotationPrivacy', level);
-    }
-  };
-
   const buttonStyle = applyTheme(
     ['ctaTextColor', 'ctaBackgroundColor'],
     settings
   );
 
   const menuLabel = (
-    <div className="annotation-publish-button__menu-label" style={buttonStyle}>
+    <div className="p-2.5 text-color-text-inverted" style={buttonStyle}>
       <Icon name="expand-menu" />
     </div>
   );
 
   return (
-    <div className="hyp-u-layout-row hyp-u-horizontal-spacing--4">
-      <div className="annotation-publish-button">
+    <div className="flex flex-row gap-x-3">
+      <div className="flex relative">
         <LabeledButton
-          classes="PublishControlButton"
+          classes={classnames(
+            // Turn off right-side border radius to align with menu-open button
+            'rounded-r-none'
+          )}
           data-testid="publish-control-button"
           style={buttonStyle}
           onClick={onSave}
@@ -89,18 +66,29 @@ function AnnotationPublishControl({
           size="large"
           variant="primary"
         >
-          Post to {publishDestination}
+          Post to {isPrivate ? 'Only Me' : group.name}
         </LabeledButton>
         {/* This wrapper div is necessary because of peculiarities with
              Safari: see https://github.com/hypothesis/client/issues/2302 */}
         <div
-          className="annotation-publish-button__menu-wrapper"
+          className={classnames(
+            // Round the right side of this menu-open button only
+            'flex flex-row rounded-r-sm bg-grey-7 hover:bg-grey-8'
+          )}
           style={buttonStyle}
         >
           <Menu
-            arrowClass="annotation-publish-button__menu-arrow"
+            arrowClass={classnames(
+              // Position up-pointing menu caret aligned beneath the
+              // down-pointing menu-open button icon
+              'right-[10px]'
+            )}
             containerPositioned={false}
-            contentClass="annotation-publish-button__menu-content"
+            contentClass={classnames(
+              // Ensure the menu is wide enough to "reach" the right-aligned
+              // up-pointing menu arrow
+              'min-w-full'
+            )}
             label={menuLabel}
             menuIndicator={false}
             title="Change annotation sharing setting"
@@ -110,19 +98,24 @@ function AnnotationPublishControl({
               icon={group.type === 'open' ? 'public' : 'groups'}
               label={group.name}
               isSelected={!isPrivate}
-              onClick={() => onSetPrivacy('shared')}
+              onClick={() => onSetPrivate(false)}
             />
             <MenuItem
               icon="lock"
               label="Only Me"
               isSelected={isPrivate}
-              onClick={() => onSetPrivacy('private')}
+              onClick={() => onSetPrivate(true)}
             />
           </Menu>
         </div>
       </div>
       <div>
-        <LabeledButton icon="cancel" onClick={onCancel} size="large">
+        <LabeledButton
+          classes="p-2.5"
+          icon="cancel"
+          onClick={onCancel}
+          size="large"
+        >
           Cancel
         </LabeledButton>
       </div>

@@ -1,63 +1,42 @@
 import classnames from 'classnames';
 
-import { isOrphan, quote } from '../../helpers/annotation-metadata';
 import { withServices } from '../../service-context';
 import { applyTheme } from '../../helpers/theme';
 
 import Excerpt from '../Excerpt';
+import StyledText from '../StyledText';
 
 /**
- * @typedef {import('../../../types/api').Annotation} Annotation
  * @typedef {import('../../../types/config').SidebarSettings} SidebarSettings
  */
 
 /**
  * @typedef AnnotationQuoteProps
- * @prop {Annotation} annotation
- * @prop {boolean} [isFocused] - Is this annotation currently focused?
- * @prop {SidebarSettings} [settings] - Used for theming.
+ * @prop {string} quote
+ * @prop {boolean} [isFocused]
+ * @prop {boolean} [isOrphan]
+ * @prop {SidebarSettings} settings
  */
 
 /**
  * Display the selected text from the document associated with an annotation.
  *
- * @parm {AnnotationQuoteProps} props
+ * @param {AnnotationQuoteProps} props
  */
-function AnnotationQuote({ annotation, isFocused, settings = {} }) {
-  // The language for the quote may be different than the client's UI (set by
-  // `<html lang="...">`).
-  //
-  // Use a blank string to indicate that it is unknown and it is up to the user
-  // agent to pick a default or analyze the content and guess.
-  //
-  // For web documents we could do better here and gather language information
-  // as part of the annotation anchoring process.
-  const documentLanguage = '';
-
+function AnnotationQuote({ quote, isFocused, isOrphan, settings }) {
   return (
-    <div
-      className={classnames({
-        'is-orphan': isOrphan(annotation),
-      })}
-    >
-      <Excerpt
-        collapsedHeight={35}
-        inlineControls={true}
-        overflowThreshold={20}
-      >
+    <Excerpt collapsedHeight={35} inlineControls={true} overflowThreshold={20}>
+      <StyledText classes={classnames({ 'p-redacted-text': isOrphan })}>
         <blockquote
-          className={classnames('p-quoted-text', {
-            'is-focused': isFocused,
-            'p-redacted-content': isOrphan(annotation),
+          className={classnames('hover:border-l-blue-quote', {
+            'border-l-blue-quote': isFocused,
           })}
-          dir="auto"
-          lang={documentLanguage}
           style={applyTheme(['selectionFontFamily'], settings)}
         >
-          {quote(annotation)}
+          {quote}
         </blockquote>
-      </Excerpt>
-    </div>
+      </StyledText>
+    </Excerpt>
   );
 }
 

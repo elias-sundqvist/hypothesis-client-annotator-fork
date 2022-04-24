@@ -47,26 +47,6 @@
 }
 
 /**
- * horizontally-oriented collection of linked icons
- */
-@mixin footer-links {
-  @include layout.row(center);
-  @include utils.border--top;
-  padding-top: 8px;
-
-  &__icon {
-    @include layout.row;
-    @include utils.icon--medium;
-    margin: 0 8px;
-    color: var.$grey-5;
-
-    &:hover {
-      color: var.$grey-6;
-    }
-  }
-}
-
-/**
  * A pattern for styling a little "pointer" (arrow) icon that attaches to
  * menu content and serves as a visual anchor back to the triggering
  * button/element. When using, you'll need to provide the appropriate
@@ -122,22 +102,6 @@
   &__actions {
     @include layout.row(right);
     @include layout.horizontal-rhythm(10px);
-  }
-}
-
-/**
- * `panel` with tighter margins and padding, for use in more confined spaces
- */
-@mixin panel--compact {
-  @include panel($rhythm: var.$layout-space--xsmall);
-  width: 24em;
-  // Keep panel constrained within annotation card boundaries and not cut off
-  // on left side when sidebar is extremely narrow
-  max-width: 85vw;
-  padding: var.$layout-space--small;
-
-  &__header {
-    padding-bottom: var.$layout-space--xsmall;
   }
 }
 

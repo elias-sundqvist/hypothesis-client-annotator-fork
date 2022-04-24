@@ -1,4 +1,8 @@
-import { offsetRelativeTo, scrollElement } from '../scroll';
+import {
+  offsetRelativeTo,
+  scrollElement,
+  scrollElementIntoView,
+} from '../scroll';
 
 describe('annotator/util/scroll', () => {
   let containers;
@@ -66,6 +70,63 @@ describe('annotator/util/scroll', () => {
 
       assert.equal(container.scrollTop, 2000);
       container.remove();
+    });
+  });
+
+  describe('scrollElementIntoView', () => {
+    let container;
+    let target;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      container.style.height = '500px';
+      container.style.overflow = 'auto';
+      container.style.position = 'relative';
+      document.body.append(container);
+
+      target = document.createElement('div');
+      target.style.position = 'absolute';
+      target.style.top = '1000px';
+      target.style.height = '20px';
+      target.style.width = '100px';
+      container.append(target);
+
+      assert.isTrue(container.scrollHeight > container.clientHeight);
+    });
+
+    afterEach(() => {
+      target.remove();
+    });
+
+    // A basic test for scrolling. We assume that the underlying implementation
+    // has more detailed tests.
+    it('scrolls element into view', async () => {
+      await scrollElementIntoView(target, { maxDuration: 1 });
+
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+
+      assert.isTrue(containerRect.top <= targetRect.top);
+      assert.isTrue(containerRect.bottom >= targetRect.bottom);
+    });
+
+    it('installs scroll-into-view workaround for XHTML documents', async () => {
+      try {
+        // Simulate an XHTML document, where `tagName` is not upper-cased as
+        // it is for HTML documents.
+        Object.defineProperty(document.body, 'tagName', {
+          value: 'body',
+          configurable: true,
+        });
+        assert.equal(document.body.tagName, 'body');
+
+        await scrollElementIntoView(target, { maxDuration: 1 });
+
+        assert.equal(document.body.tagName, 'BODY');
+      } finally {
+        // Remove property override installed by this test.
+        delete document.body.tagName;
+      }
     });
   });
 });

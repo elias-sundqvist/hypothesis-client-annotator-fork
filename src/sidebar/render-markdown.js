@@ -14,14 +14,17 @@ DOMPurify.addHook('afterSanitizeAttributes', node => {
 });
 
 function targetBlank() {
+  /** @param {string} text */
   function filter(text) {
     return text.replace(/<a href=/g, '<a target="_blank" href=');
   }
   return [{ type: 'output', filter }];
 }
 
+/** @type {showdown.Converter} */
 let converter;
 
+/** @param {string} markdown */
 function renderMarkdown(markdown) {
   if (!converter) {
     // see https://github.com/showdownjs/showdown#valid-options
@@ -40,17 +43,29 @@ function renderMarkdown(markdown) {
   return converter.makeHtml(markdown);
 }
 
+/** @param {number} id */
 function mathPlaceholder(id) {
   return '{math:' + id.toString() + '}';
 }
+
+/**
+ * @typedef MathBlock
+ * @prop {number} id
+ * @prop {boolean} inline
+ * @prop {string} expression
+ */
 
 /**
  * Parses a string containing mixed markdown and LaTeX in between
  * '$$..$$' or '\( ... \)' delimiters and returns an object containing a
  * list of math blocks found in the string, plus the input string with math
  * blocks replaced by placeholders.
+ *
+ * @param {string} content
+ * @return {{ content: string, mathBlocks: MathBlock[]}}
  */
 function extractMath(content) {
+  /** @type {MathBlock[]} */
   const mathBlocks = [];
   let pos = 0;
   let replacedContent = content;
@@ -113,6 +128,10 @@ function extractMath(content) {
   };
 }
 
+/**
+ * @param {string} html
+ * @param {MathBlock[]} mathBlocks
+ */
 function insertMath(html, mathBlocks) {
   return mathBlocks.reduce((html, block) => {
     let renderedMath;
@@ -131,6 +150,9 @@ function insertMath(html, mathBlocks) {
   }, html);
 }
 
+/**
+ * @param {string} markdown
+ */
 export function renderMathAndMarkdown(markdown) {
   return window['renderObsidianMarkdown'](markdown);
 }

@@ -20,9 +20,11 @@ import {
 export class AnnotationsService {
   /**
    * @param {import('./api').APIService} api
+   * @param {import('./annotation-activity').AnnotationActivityService} annotationActivity
    * @param {import('../store').SidebarStore} store
    */
-  constructor(api, store) {
+  constructor(annotationActivity, api, store) {
+    this._activity = annotationActivity;
     this._api = api;
     this._store = store;
   }
@@ -66,6 +68,10 @@ export class AnnotationsService {
     }
 
     const userid = profile.userid;
+    if (!userid) {
+      throw new Error('Cannot create annotation when logged out');
+    }
+
     const userInfo = profile.user_info;
 
     // We need a unique local/app identifier for this new annotation such
@@ -167,6 +173,7 @@ export class AnnotationsService {
    */
   async delete(annotation) {
     await this._api.annotation.delete({ id: annotation.id });
+    this._activity.reportActivity('delete', annotation);
     this._store.removeAnnotations([annotation]);
   }
 
@@ -177,6 +184,7 @@ export class AnnotationsService {
    */
   async flag(annotation) {
     await this._api.annotation.flag({ id: annotation.id });
+    this._activity.reportActivity('flag', annotation);
     this._store.updateFlagStatus(annotation.id, true);
   }
 
@@ -208,22 +216,27 @@ export class AnnotationsService {
    */
   async save(annotation) {
     let saved;
+    /** @type {import('../../types/config').AnnotationEventType} */
+    let eventType;
 
     const annotationWithChanges = this._applyDraftChanges(annotation);
 
     if (!metadata.isSaved(annotation)) {
       saved = this._api.annotation.create({}, annotationWithChanges);
+      eventType = 'create';
     } else {
       saved = this._api.annotation.update(
         { id: annotation.id },
         annotationWithChanges
       );
+      eventType = 'update';
     }
 
     let savedAnnotation;
     this._store.annotationSaveStarted(annotation);
     try {
       savedAnnotation = await saved;
+      this._activity.reportActivity(eventType, savedAnnotation);
     } finally {
       this._store.annotationSaveFinished(annotation);
     }

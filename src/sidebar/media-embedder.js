@@ -76,7 +76,8 @@ function parseTimeString(timeValue) {
   // match[2] - Unit (e.g. 'h','m','s', or empty)
   while ((match = timePattern.exec(timeValue)) !== null) {
     if (match[2]) {
-      seconds += Number(match[1]) * multipliers[match[2]];
+      const unit = /** @type {keyof multipliers} */ (match[2]);
+      seconds += Number(match[1]) * multipliers[unit];
     } else {
       seconds += +match[1]; // Treat values missing units as seconds
     }
@@ -165,6 +166,7 @@ function createEmbedGenerator(
   iframeUrlGenerator,
   { aspectRatio } = {}
 ) {
+  /** @param {HTMLAnchorElement} link */
   const generator = link => {
     if (link.hostname !== hostname) {
       return null;
@@ -344,7 +346,8 @@ function embedForLink(link) {
   return null;
 }
 
-/** Replace the given link element with an embed.
+/**
+ * Replace the given link element with an embed.
  *
  * If the given link element is a link to an embeddable media and if its link
  * text is the same as its href then it will be replaced in the DOM with an
@@ -373,12 +376,17 @@ function replaceLinkWithEmbed(link) {
   // The link's text may or may not be percent encoded. The `link.href` property
   // will always be percent encoded. When comparing the two we need to be
   // agnostic as to which representation is used.
-  if (
-    link.href !== link.textContent &&
-    decodeURI(link.href) !== link.textContent
-  ) {
-    return null;
+  if (link.href !== link.textContent) {
+    try {
+      const encodedText = encodeURI(/** @type {string} */ (link.textContent));
+      if (link.href !== encodedText) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
   }
+
   const embed = embedForLink(link);
   if (embed) {
     /** @type {Element} */ (link.parentElement).replaceChild(embed, link);

@@ -56,6 +56,7 @@ function NotebookView({ loadAnnotationsService, streamer }) {
   // of them: this is a performance safety valve.
   const maxResults = 5000;
 
+  /** @param {Error} error */
   const onLoadError = error => {
     if (error instanceof ResultSizeError) {
       setHasTooManyAnnotationsError(true);
@@ -101,7 +102,7 @@ function NotebookView({ loadAnnotationsService, streamer }) {
     }
   }, [loadAnnotationsService, groupId, store]);
 
-  // Pagination-page-changing callback
+  /** @param {number} newPage */
   const onChangePage = newPage => {
     setPaginationPage(newPage);
   };
@@ -116,7 +117,9 @@ function NotebookView({ loadAnnotationsService, streamer }) {
   useLayoutEffect(() => {
     // TODO: Transition and effects here should be improved
     if (paginationPage !== lastPaginationPage.current) {
-      scrollIntoView(threadListScrollTop.current);
+      if (threadListScrollTop.current) {
+        scrollIntoView(threadListScrollTop.current);
+      }
       lastPaginationPage.current = paginationPage;
     }
   }, [paginationPage]);
@@ -146,7 +149,7 @@ function NotebookView({ loadAnnotationsService, streamer }) {
           forcedVisibleCount={forcedVisibleCount}
           isFiltered={hasAppliedFilter}
           isLoading={isLoading}
-          resultCount={resultCount}
+          resultCount={resultCount ?? 0}
         />
       </div>
       <div className="NotebookView__items">

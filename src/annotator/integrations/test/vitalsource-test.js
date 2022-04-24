@@ -1,4 +1,4 @@
-import { delay } from '../../../test-util/wait';
+import { delay, waitFor } from '../../../test-util/wait';
 import {
   VitalSourceInjector,
   VitalSourceContentIntegration,
@@ -127,7 +127,8 @@ describe('annotator/integrations/vitalsource', () => {
       }, 'Book container element not found');
     });
 
-    it('injects client into content frame', () => {
+    it('injects client into content frame', async () => {
+      await waitFor(() => fakeInjectClient.called);
       assert.calledWith(fakeInjectClient, fakeViewer.contentFrame, fakeConfig);
     });
 
@@ -150,7 +151,7 @@ describe('annotator/integrations/vitalsource', () => {
         assert.notCalled(fakeInjectClient);
 
         fakeViewer.finishChapterLoad(newChapterContent);
-        await delay(0);
+        await waitFor(() => fakeInjectClient.called);
         assert.calledWith(
           fakeInjectClient,
           fakeViewer.contentFrame,
@@ -160,6 +161,7 @@ describe('annotator/integrations/vitalsource', () => {
     });
 
     it("doesn't re-inject if content frame is removed", async () => {
+      await waitFor(() => fakeInjectClient.called);
       fakeInjectClient.resetHistory();
 
       // Remove the content frame. This will trigger a re-injection check, but
@@ -171,6 +173,7 @@ describe('annotator/integrations/vitalsource', () => {
     });
 
     it("doesn't re-inject if content frame siblings change", async () => {
+      await waitFor(() => fakeInjectClient.called);
       fakeInjectClient.resetHistory();
 
       // Modify the DOM tree. This will trigger a re-injection check, but do
@@ -222,7 +225,7 @@ describe('annotator/integrations/vitalsource', () => {
     it('stops mouse events from propagating to parent frame', () => {
       createIntegration();
 
-      const events = ['mousedown', 'mouseup', 'mouseout'];
+      const events = ['mouseup', 'mousedown', 'mouseout'];
 
       for (let eventName of events) {
         const listener = sinon.stub();
@@ -299,6 +302,7 @@ describe('annotator/integrations/vitalsource', () => {
         fakeImageTextLayer = {
           container: document.createElement('div'),
           destroy: sinon.stub(),
+          updateSync: sinon.stub(),
         };
         FakeImageTextLayer = sinon.stub().returns(fakeImageTextLayer);
 
@@ -335,6 +339,41 @@ describe('annotator/integrations/vitalsource', () => {
         assert.notCalled(FakeImageTextLayer);
       });
 
+      it('installs scrolling workaround for tall frames', async () => {
+        // Create a shadow DOM and iframe structure that matches the relevant
+        // parts of the real VS reader.
+        const bookElement = document.createElement('mosaic-book');
+        const shadowRoot = bookElement.attachShadow({ mode: 'open' });
+        document.body.append(bookElement);
+
+        const frame = document.createElement('iframe');
+        frame.style.height = '2000px';
+        frame.setAttribute('scrolling', 'no');
+        shadowRoot.append(frame);
+
+        const frameElementStub = sinon
+          .stub(window, 'frameElement')
+          .get(() => frame);
+        try {
+          createIntegration();
+
+          assert.isFalse(frame.hasAttribute('scrolling'));
+          assert.equal(
+            getComputedStyle(frame).height,
+            `${window.innerHeight}px` // "100%" in pixels
+          );
+
+          // Try re-adding the scrolling attribute. It should get re-removed.
+          frame.setAttribute('scrolling', 'no');
+          await delay(0);
+
+          assert.isFalse(frame.hasAttribute('scrolling'));
+        } finally {
+          frameElementStub.restore();
+          bookElement.remove();
+        }
+      });
+
       it('creates hidden text layer in PDF documents', () => {
         createPageImageAndData();
         createIntegration();
@@ -346,7 +385,13 @@ describe('annotator/integrations/vitalsource', () => {
           pageText
         );
 
-        const glyphs = FakeImageTextLayer.getCall(0).args[1];
+        const glyphs = FakeImageTextLayer.getCall(0).args[1].map(domRect => ({
+          left: domRect.left,
+          right: domRect.right,
+          top: domRect.top,
+          bottom: domRect.bottom,
+        }));
+
         const expectedGlyphs = window.innerPageData.glyphs.glyphs.map(g => ({
           left: g.l / 100,
           right: g.r / 100,
@@ -374,23 +419,27 @@ describe('annotator/integrations/vitalsource', () => {
 
           // Activate side-by-side mode. Page image should be resized to fit
           // alongside sidebar.
-          const sidebarWidth = 150;
+          // Minimum threshold for enabling side-by-side mode is 480px
+          const sidebarWidth = window.innerWidth - 481;
           const expectedWidth = window.innerWidth - sidebarWidth;
           integration.fitSideBySide({ expanded: true, width: sidebarWidth });
           assert.equal(fakePageImage.parentElement.style.textAlign, 'left');
           assert.equal(fakePageImage.style.width, `${expectedWidth}px`);
+          assert.calledOnce(fakeImageTextLayer.updateSync);
 
           // Deactivate side-by-side mode. Style overrides should be removed.
           integration.fitSideBySide({ expanded: false });
           assert.equal(fakePageImage.parentElement.style.textAlign, '');
           assert.equal(fakePageImage.style.width, '');
+          assert.calledTwice(fakeImageTextLayer.updateSync);
         });
 
         it('does not resize page image if there is not enough space', () => {
           createPageImageAndData();
           const integration = createIntegration();
 
-          const sidebarWidth = window.innerWidth - 200;
+          // This will leave less than 480px available to the main content
+          const sidebarWidth = window.innerWidth - 479;
           integration.fitSideBySide({ expanded: true, width: sidebarWidth });
           assert.equal(fakePageImage.parentElement.style.textAlign, '');
           assert.equal(fakePageImage.style.width, '');

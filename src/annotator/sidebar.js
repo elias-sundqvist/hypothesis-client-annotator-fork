@@ -1,4 +1,4 @@
-import Hammer from 'hammerjs';
+import * as Hammer from 'hammerjs';
 
 import { addConfigFragment } from '../shared/config-fragment';
 import { sendErrorsTo } from '../shared/frame-error-capture';
@@ -30,12 +30,14 @@ export const MIN_RESIZE = 280;
 /**
  * Create the iframe that will load the sidebar application.
  *
+ * @param {Record<string, unknown>} config
  * @return {HTMLIFrameElement}
  */
 function createSidebarIframe(config) {
+  const sidebarURL = /** @type {string} */ (config.sidebarAppUrl);
   const sidebarAppSrc = addConfigFragment(
-    config.sidebarAppUrl,
-    createAppConfig(config.sidebarAppUrl, config)
+    sidebarURL,
+    createAppConfig(sidebarURL, config)
   );
 
   const sidebarFrame = document.createElement('iframe');
@@ -45,7 +47,7 @@ function createSidebarIframe(config) {
 
   sidebarFrame.src = sidebarAppSrc;
   sidebarFrame.title = 'Hypothesis annotation viewer';
-  sidebarFrame.className = 'h-sidebar-iframe';
+  sidebarFrame.className = 'sidebar-frame';
 
   return sidebarFrame;
 }
@@ -70,7 +72,7 @@ export class Sidebar {
      * Tracks which `Guest` has a text selection. `null` indicates to default
      * to the first connected guest frame.
      *
-     * @type {PortRPC|null}
+     * @type {PortRPC<GuestToHostEvent, HostToGuestEvent>|null}
      */
     this._guestWithSelection = null;
 
@@ -106,10 +108,10 @@ export class Sidebar {
     } else {
       this.iframeContainer = document.createElement('div');
       this.iframeContainer.style.display = 'none';
-      this.iframeContainer.className = 'annotator-frame';
+      this.iframeContainer.className = 'sidebar-container';
 
       if (config.theme === 'clean') {
-        this.iframeContainer.classList.add('annotator-frame--theme-clean');
+        this.iframeContainer.classList.add('theme-clean');
       } else {
         this.bucketBar = new BucketBar(this.iframeContainer, {
           onFocusAnnotations: tags =>
@@ -365,7 +367,8 @@ export class Sidebar {
   _setupGestures() {
     const toggleButton = this.toolbar.sidebarToggleButton;
     if (toggleButton) {
-      this._hammerManager = new Hammer.Manager(toggleButton).on(
+      this._hammerManager = new Hammer.Manager(toggleButton);
+      this._hammerManager.on(
         'panstart panend panleft panright',
         /* istanbul ignore next */
         event => this._onPan(event)
@@ -482,6 +485,7 @@ export class Sidebar {
     }
   }
 
+  /** @param {HammerInput} event */
   _onPan(event) {
     const frame = this.iframeContainer;
     if (!frame) {
@@ -493,7 +497,7 @@ export class Sidebar {
         this._resetGestureState();
 
         // Disable animated transition of sidebar position
-        frame.classList.add('annotator-no-transition');
+        frame.classList.add('sidebar-no-transition');
 
         // Disable pointer events on the iframe.
         frame.style.pointerEvents = 'none';
@@ -504,7 +508,7 @@ export class Sidebar {
 
         break;
       case 'panend':
-        frame.classList.remove('annotator-no-transition');
+        frame.classList.remove('sidebar-no-transition');
 
         // Re-enable pointer events on the iframe.
         frame.style.pointerEvents = '';
@@ -541,7 +545,7 @@ export class Sidebar {
     if (this.iframeContainer) {
       const width = this.iframeContainer.getBoundingClientRect().width;
       this.iframeContainer.style.marginLeft = `${-1 * width}px`;
-      this.iframeContainer.classList.remove('annotator-collapsed');
+      this.iframeContainer.classList.remove('sidebar-collapsed');
     }
 
     this.toolbar.sidebarOpen = true;
@@ -556,7 +560,7 @@ export class Sidebar {
   close() {
     if (this.iframeContainer) {
       this.iframeContainer.style.marginLeft = '';
-      this.iframeContainer.classList.add('annotator-collapsed');
+      this.iframeContainer.classList.add('sidebar-collapsed');
     }
 
     this.toolbar.sidebarOpen = false;

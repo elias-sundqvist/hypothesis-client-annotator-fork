@@ -323,7 +323,9 @@ describe('MarkdownEditor', () => {
      * @param {string} key - One of 'ArrowRight', 'ArrowLeft', 'End', 'Home'
      */
     const pressKey = key =>
-      wrapper.find('.MarkdownEditor__toolbar').simulate('keydown', { key });
+      wrapper
+        .find('[data-testid="markdown-toolbar"]')
+        .simulate('keydown', { key });
 
     /**
      * Asserts the active button's title partially matches the supplied string.
@@ -500,7 +502,7 @@ describe('MarkdownEditor', () => {
     });
     wrapper.update();
 
-    assert.deepEqual(wrapper.find('MarkdownView').prop('textStyle'), textStyle);
+    assert.deepEqual(wrapper.find('MarkdownView').prop('style'), textStyle);
   });
 
   it(

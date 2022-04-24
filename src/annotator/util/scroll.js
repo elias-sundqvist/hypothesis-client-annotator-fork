@@ -1,3 +1,5 @@
+import scrollIntoView from 'scroll-into-view';
+
 /**
  * Return a promise that resolves on the next animation frame.
  */
@@ -47,7 +49,7 @@ export function offsetRelativeTo(element, parent) {
 export async function scrollElement(
   element,
   offset,
-  /* istanbul ignore next - default options are overridden in tests */
+  /* istanbul ignore next - defaults are overridden in tests */
   { maxDuration = 500 } = {}
 ) {
   const startOffset = element.scrollTop;
@@ -68,4 +70,33 @@ export async function scrollElement(
     scrollFraction = Math.min(1.0, (Date.now() - scrollStart) / scrollDuration);
     element.scrollTop = interpolate(startOffset, endOffset, scrollFraction);
   }
+}
+
+/**
+ * Smoothly scroll an element into view.
+ *
+ * @param {HTMLElement} element
+ * @param {object} options
+ *   @param {number} [options.maxDuration]
+ */
+export async function scrollElementIntoView(
+  element,
+  /* istanbul ignore next - defaults are overridden in tests */
+  { maxDuration = 500 } = {}
+) {
+  // Make the body's `tagName` return an upper-case string in XHTML documents
+  // like it does in HTML documents. This is a workaround for
+  // `scrollIntoView`'s detection of the <body> element. See
+  // https://github.com/KoryNunn/scroll-into-view/issues/101.
+  const body = element.closest('body');
+  if (body && body.tagName !== 'BODY') {
+    Object.defineProperty(body, 'tagName', {
+      value: 'BODY',
+      configurable: true,
+    });
+  }
+
+  await new Promise(resolve =>
+    scrollIntoView(element, { time: maxDuration }, resolve)
+  );
 }
