@@ -69,48 +69,10 @@ function AnnotationPublishControl({
           size="large"
           variant="primary"
         >
-          Post to {isPrivate ? 'Only Me' : group.name}
+          Save Annotation
         </LabeledButton>
         {/* This wrapper div is necessary because of peculiarities with
              Safari: see https://github.com/hypothesis/client/issues/2302 */}
-        <div
-          className={classnames(
-            // Round the right side of this menu-open button only
-            'flex flex-row rounded-r-sm bg-grey-7 hover:bg-grey-8'
-          )}
-          style={buttonStyle}
-        >
-          <Menu
-            arrowClass={classnames(
-              // Position up-pointing menu caret aligned beneath the
-              // down-pointing menu-open button icon
-              'right-[10px]'
-            )}
-            containerPositioned={false}
-            contentClass={classnames(
-              // Ensure the menu is wide enough to "reach" the right-aligned
-              // up-pointing menu arrow
-              'min-w-full'
-            )}
-            label={menuLabel}
-            menuIndicator={false}
-            title="Change annotation sharing setting"
-            align="left"
-          >
-            <MenuItem
-              icon={group.type === 'open' ? 'public' : 'groups'}
-              label={group.name}
-              isSelected={!isPrivate}
-              onClick={() => onSetPrivate(false)}
-            />
-            <MenuItem
-              icon="lock"
-              label="Only Me"
-              isSelected={isPrivate}
-              onClick={() => onSetPrivate(true)}
-            />
-          </Menu>
-        </div>
       </div>
       <div>
         <LabeledButton

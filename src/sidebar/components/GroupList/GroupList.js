@@ -42,6 +42,7 @@ function publisherProvidedIcon(settings) {
  * @param {GroupListProps} props
  */
 function GroupList({ settings }) {
+  return <></>
   const store = useSidebarStore();
   const currentGroups = store.getCurrentlyViewingGroups();
   const featuredGroups = store.getFeaturedGroups();
@@ -75,7 +76,7 @@ function GroupList({ settings }) {
   // nb. If we create other menus that behave similarly in future, we may want
   // to move this state to the `Menu` component.
   const [expandedGroup, setExpandedGroup] = useState(
-    /** @type {Group|null} */ (null)
+    /** @type {Group|null} */(null)
   );
 
   let label;

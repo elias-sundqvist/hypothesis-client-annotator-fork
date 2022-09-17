@@ -106,9 +106,8 @@ function TopBar({
                   onClick={applyPendingUpdates}
                   size="small"
                   variant="primary"
-                  title={`Show ${pendingUpdateCount} new/updated ${
-                    pendingUpdateCount === 1 ? 'annotation' : 'annotations'
-                  }`}
+                  title={`Show ${pendingUpdateCount} new/updated ${pendingUpdateCount === 1 ? 'annotation' : 'annotations'
+                    }`}
                 />
               )}
               <SearchInput
@@ -141,28 +140,6 @@ function TopBar({
               className="flex items-center text-lg font-medium space-x-1"
               data-testid="login-links"
             >
-              {auth.status === 'unknown' && <span>⋯</span>}
-              {auth.status === 'logged-out' && (
-                <>
-                  <LinkButton
-                    classes="inline"
-                    onClick={onSignUp}
-                    style={loginLinkStyle}
-                    variant="primary"
-                  >
-                    Sign up
-                  </LinkButton>
-                  <div>/</div>
-                  <LinkButton
-                    classes="inline"
-                    onClick={onLogin}
-                    style={loginLinkStyle}
-                    variant="primary"
-                  >
-                    Log in
-                  </LinkButton>
-                </>
-              )}
             </div>
           )}
         </div>
