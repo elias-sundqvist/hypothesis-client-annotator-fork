@@ -1,3 +1,5 @@
+import { TinyEmitter } from 'tiny-emitter';
+
 import { anchor, describe } from '../anchoring/html';
 
 import { HTMLMetadata } from './html-metadata';
@@ -5,6 +7,7 @@ import {
   guessMainContentArea,
   preserveScrollPosition,
 } from './html-side-by-side';
+import { NavigationObserver } from '../util/navigation-observer';
 import { scrollElementIntoView } from '../util/scroll';
 
 /**
@@ -28,19 +31,22 @@ const MIN_HTML_WIDTH = 480;
  *
  * @implements {Integration}
  */
-export class HTMLIntegration {
+export class HTMLIntegration extends TinyEmitter {
   /**
    * @param {object} options
    *   @param {FeatureFlags} options.features
    *   @param {HTMLElement} [options.container]
    */
   constructor({ features, container = document.body }) {
+    super();
+
     this.features = features;
     this.container = container;
     this.anchor = anchor;
     this.describe = describe;
 
     this._htmlMeta = new HTMLMetadata();
+    this._prevURI = this._htmlMeta.uri();
 
     /** Whether to attempt to resize the document to fit alongside sidebar. */
     this._sideBySideEnabled = this.features.flagEnabled('html_side_by_side');
@@ -53,6 +59,28 @@ export class HTMLIntegration {
 
     /** @type {SidebarLayout|null} */
     this._lastLayout = null;
+
+    // Watch for changes to `location.href`.
+    this._navObserver = new NavigationObserver(() => this._checkForURIChange());
+
+    // Watch for potential changes to location information in `<head>`, eg.
+    // `<link rel=canonical>`.
+    this._metaObserver = new MutationObserver(() => this._checkForURIChange());
+    this._metaObserver.observe(document.head, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+
+      attributeFilter: [
+        // Keys and values of <link> elements
+        'rel',
+        'href',
+
+        // Keys and values of <meta> elements
+        'name',
+        'content',
+      ],
+    });
 
     this._flagsChanged = () => {
       const sideBySide = features.flagEnabled('html_side_by_side');
@@ -69,11 +97,21 @@ export class HTMLIntegration {
     this.features.on('flagsChanged', this._flagsChanged);
   }
 
+  _checkForURIChange() {
+    const currentURI = this._htmlMeta.uri();
+    if (currentURI !== this._prevURI) {
+      this._prevURI = currentURI;
+      this.emit('uriChanged', currentURI);
+    }
+  }
+
   canAnnotate() {
     return true;
   }
 
   destroy() {
+    this._navObserver.disconnect();
+    this._metaObserver.disconnect();
     this.features.off('flagsChanged', this._flagsChanged);
   }
 

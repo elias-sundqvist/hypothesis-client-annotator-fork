@@ -89,7 +89,12 @@ describe('FrameSyncService', () => {
     };
 
     fakeStore = fakeReduxStore(
-      { annotations: [], frames: [], profile: { features: {} } },
+      {
+        annotations: [],
+        frames: [],
+        profile: { features: {} },
+        contentInfo: null,
+      },
       {
         allAnnotations() {
           return this.getState().annotations;
@@ -117,6 +122,14 @@ describe('FrameSyncService', () => {
 
         profile() {
           return this.getState().profile;
+        },
+
+        getContentInfo() {
+          return this.getState().contentInfo;
+        },
+
+        setContentInfo(info) {
+          this.setState({ contentInfo: info });
         },
 
         findIDsForTags: sinon.stub(),
@@ -591,6 +604,26 @@ describe('FrameSyncService', () => {
       await connectGuest();
       assert.calledWith(channel.call, 'setHighlightsVisible', false);
     });
+
+    [true, false].forEach(contentInfoAvailable => {
+      it('sends content info to guest if available', async () => {
+        let channel;
+        setupPortRPC = rpc => {
+          channel = rpc;
+        };
+        const contentInfo = { item: { title: 'Some article' } };
+        if (contentInfoAvailable) {
+          fakeStore.setContentInfo(contentInfo);
+        }
+
+        await connectGuest();
+
+        assert.equal(
+          channel.call.calledWith('showContentInfo', contentInfo),
+          contentInfoAvailable
+        );
+      });
+    });
   });
 
   context('when a guest frame is destroyed', () => {
@@ -773,6 +806,19 @@ describe('FrameSyncService', () => {
 
       assert.calledWith(hostRPC().call, 'featureFlagsUpdated', currentFlags());
       assert.calledWith(guestRPC().call, 'featureFlagsUpdated', currentFlags());
+    });
+  });
+
+  context('when content info in store changes', () => {
+    const contentInfo = { item: { title: 'Some article' } };
+
+    it('sends new content info to guests', async () => {
+      await frameSync.connect();
+      await connectGuest();
+
+      fakeStore.setContentInfo(contentInfo);
+
+      assert.calledWith(guestRPC().call, 'showContentInfo', contentInfo);
     });
   });
 });

@@ -1,9 +1,13 @@
 import classnames from 'classnames';
-import { Icon, normalizeKeyName } from '@hypothesis/frontend-shared';
+import { Icon } from '@hypothesis/frontend-shared';
 import { useEffect, useRef } from 'preact/hooks';
 
 import MenuKeyboardNavigation from './MenuKeyboardNavigation';
 import Slider from './Slider';
+
+/**
+ * @typedef {import('../icons').sidebarIcons} SidebarIcons
+ */
 
 /**
  * Render a clickable div that will toggle the expanded state of the
@@ -61,11 +65,10 @@ function SubmenuToggle({ title, isExpanded, onToggleSubmenu }) {
  *   `onClick` callback should be supplied.
  * @prop {string} [iconAlt] - Alt text for icon.
  * @prop {string} [icon] -
- *   Name or URL of icon to display. If the value is a URL it is displayed using an `<img>`,
- *   if it is a name it is displayed using `SvgIcon`.  If the property is `"blank"` a blank
- *   placeholder is displayed in place of an icon. If the property is falsey, no placeholder
- *   is displayed. The placeholder is useful to keep menu item labels aligned in a list if
- *   some items have icons and others do not.
+ *   Name or URL of icon to display. If the value is a URL it is displayed using an `<img>`;
+ *   if it is a non-URL string it is assumed to be the `name` of a registered icon.
+ *   If the property is `"blank"` a blank placeholder is displayed in place of an icon.
+ *   The placeholder is useful to keep menu item labels aligned.
  * @prop {boolean} [isDisabled] -
  *   Dim the label to indicate that this item is not currently available.  The `onClick`
  *   callback will still be invoked when this item is clicked and the submenu, if any,
@@ -101,8 +104,8 @@ function SubmenuToggle({ title, isExpanded, onToggleSubmenu }) {
  * When clicked, menu items either open an external link, if the `href` prop
  * is provided, or perform a custom action via the `onClick` callback.
  *
- * The icon can either be an external SVG image, referenced by URL, or a named
- * icon rendered by an `SvgIcon`.
+ * The icon can either be an external SVG image, referenced by URL, or the
+ * name of an icon registered in the application. @see {SidebarIcons}
  *
  * For items that have submenus, the `MenuItem` will call the `renderSubmenu`
  * prop to render the content of the submenu, when the submenu is visible.
@@ -158,7 +161,7 @@ export default function MenuItem({
 
   /** @param {KeyboardEvent} event */
   const onKeyDown = event => {
-    switch (normalizeKeyName(event.key)) {
+    switch (event.key) {
       case 'ArrowRight':
         if (onToggleSubmenu) {
           event.stopPropagation();
@@ -227,7 +230,7 @@ export default function MenuItem({
   );
 
   const wrapperClasses = classnames(
-    'hyp-u-outline-on-keyboard-focus--inset',
+    'focus-visible-ring ring-inset',
     'w-full min-w-[150px] flex items-center select-none',
     'border-b',
     // Set this container as a "group" so that children may style based on its

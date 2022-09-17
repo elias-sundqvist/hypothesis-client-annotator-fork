@@ -139,8 +139,10 @@
  * @prop {(a: Anchor) => Promise<void>} scrollToAnchor - Scroll to an anchor.
  *   This will only be called if the anchor has at least one highlight (ie.
  *   `anchor.highlights` is a non-empty array)
+ * @prop {(c: ContentInfoConfig) => void} [showContentInfo] - Show information
+ *   about the current document and content provider
  *
- * @typedef {Destroyable & IntegrationBase} Integration
+ * @typedef {Destroyable & TinyEmitter & IntegrationBase} Integration
  */
 
 /**
@@ -186,9 +188,44 @@
  */
 
 /**
- * Specifies a content partner/provider to show branding for.
+ * Content provider logo details.
  *
- * @typedef {'jstor'} ContentPartner
+ * @typedef ContentInfoLogo
+ * @prop {string} logo
+ * @prop {string} title
+ * @prop {string} link
+ */
+
+/**
+ * Metadata for the current document, for display in the content info banner.
+ *
+ * @typedef ContentInfoItem
+ * @prop {string} title - Title of the current article, chapter etc.
+ * @prop {string} [subtitle]
+ */
+
+/**
+ * Links related to the current document, for display in the content info banner.
+ *
+ * @typedef ContentInfoLinks
+ * @prop {string} [previousItem] - Previous item in the book, journal etc.
+ * @prop {string} [nextItem] - Next item in the book, journal etc.
+ * @prop {string} currentItem - This item in the content provider's context
+ */
+
+/**
+ * Configuration for content information banner.
+ *
+ * In some contexts we have a contractual obligation to show information
+ * about where the current document is from (content provider, journal issue
+ * or book in which it appeared) and related links.
+ *
+ * @typedef {object} ContentInfoConfig
+ * @prop {ContentInfoLogo} logo - Logo of the content provider
+ * @prop {ContentInfoItem} item - Metadata about the current content item
+ * @prop {ContentInfoItem} container - Metadata about the container (journal or
+ *   book, e.g.) the current `item` is part of
+ * @prop {ContentInfoLinks} links
  */
 
 // Make TypeScript treat this file as a module.

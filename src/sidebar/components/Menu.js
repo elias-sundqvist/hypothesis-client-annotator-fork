@@ -1,9 +1,5 @@
 import classnames from 'classnames';
-import {
-  Icon,
-  normalizeKeyName,
-  useElementShouldClose,
-} from '@hypothesis/frontend-shared';
+import { Icon, useElementShouldClose } from '@hypothesis/frontend-shared';
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 
 import MenuArrow from './MenuArrow';
@@ -137,7 +133,7 @@ export default function Menu({
   // It should also close if the user presses a key which activates menu items.
   /** @param {KeyboardEvent} event */
   const handleMenuKeyDown = event => {
-    const key = normalizeKeyName(event.key);
+    const key = event.key;
     if (key === 'Enter' || key === ' ') {
       // The browser will not open the link if the link element is removed
       // from within the keypress event that triggers it. Add a little
@@ -174,7 +170,7 @@ export default function Menu({
         aria-expanded={isOpen ? 'true' : 'false'}
         aria-haspopup={true}
         className={classnames(
-          'hyp-u-outline-on-keyboard-focus',
+          'focus-visible-ring',
           'flex items-center justify-center rounded-sm transition-colors',
           {
             'text-grey-7 hover:text-grey-9': !isOpen,
@@ -215,7 +211,7 @@ export default function Menu({
           />
           <div
             className={classnames(
-              'hyp-u-outline-on-keyboard-focus',
+              'focus-visible-ring',
               // Position menu content near bottom of menu label/toggle control
               'absolute top-[calc(100%+5px)] z-1 border shadow',
               'bg-white text-lg',

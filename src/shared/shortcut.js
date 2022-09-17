@@ -1,5 +1,3 @@
-import { normalizeKeyName } from '@hypothesis/frontend-shared';
-
 import { useEffect } from 'preact/hooks';
 
 /**
@@ -55,7 +53,7 @@ export function matchShortcut(event, shortcut) {
 
   return (
     actualModifiers === requiredModifiers &&
-    normalizeKeyName(event.key).toLowerCase() === requiredKey
+    event.key.toLowerCase() === requiredKey
   );
 }
 
@@ -74,7 +72,7 @@ export function matchShortcut(event, shortcut) {
  *
  * @param {string} shortcut - Shortcut key sequence. See `matchShortcut`.
  * @param {(e: KeyboardEvent) => void} onPress - A function to call when the shortcut matches
- * @param {ShortcutOptions} [options]
+ * @param {ShortcutOptions} options
  * @return {() => void} A function that removes the shortcut
  */
 export function installShortcut(
@@ -112,7 +110,7 @@ export function installShortcut(
  * @param {string|null} shortcut -
  *   A shortcut key sequence to match or `null` to disable. See `matchShortcut`.
  * @param {(e: KeyboardEvent) => void} onPress - A function to call when the shortcut matches
- * @param {ShortcutOptions} [options]
+ * @param {ShortcutOptions} options
  */
 export function useShortcut(shortcut, onPress, { rootElement } = {}) {
   useEffect(() => {

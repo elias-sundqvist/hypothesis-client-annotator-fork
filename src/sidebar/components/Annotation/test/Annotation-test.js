@@ -10,6 +10,7 @@ import Annotation, { $imports } from '../Annotation';
 describe('Annotation', () => {
   // Dependency Mocks
   let fakeMetadata;
+  let fakeAnnotationUser;
 
   // Injected dependency mocks
   let fakeAnnotationsService;
@@ -43,13 +44,23 @@ describe('Annotation', () => {
       save: sinon.stub().resolves(),
     };
 
+    fakeAnnotationUser = {
+      annotationDisplayName: sinon.stub().returns('Richard Lionheart'),
+    };
+
     fakeMetadata = {
+      annotationRole: sinon.stub().returns('Annotation'),
       quote: sinon.stub(),
     };
 
     fakeStore = {
+      defaultAuthority: sinon.stub().returns('example.com'),
       getDraft: sinon.stub().returns(null),
       isAnnotationFocused: sinon.stub().returns(false),
+      isFeatureEnabled: sinon
+        .stub()
+        .withArgs('client_display_names')
+        .returns(true),
       isSavingAnnotation: sinon.stub().returns(false),
       profile: sinon.stub().returns({ userid: 'acct:foo@bar.com' }),
       setExpanded: sinon.stub(),
@@ -58,12 +69,33 @@ describe('Annotation', () => {
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
       '../../helpers/annotation-metadata': fakeMetadata,
+      '../../helpers/annotation-user': fakeAnnotationUser,
       '../../store': { useSidebarStore: () => fakeStore },
     });
   });
 
   afterEach(() => {
     $imports.$restore();
+  });
+
+  describe('annotation accessibility (ARIA) attributes', () => {
+    it('should add a descriptive `aria-label` for an existing annotation', () => {
+      const wrapper = createComponent();
+
+      assert.equal(
+        wrapper.find('article').props()['aria-label'],
+        'Annotation by Richard Lionheart'
+      );
+    });
+
+    it('should add a descriptive `aria-label` for a new annotation', () => {
+      const wrapper = createComponent({ annotation: fixtures.newAnnotation() });
+
+      assert.equal(
+        wrapper.find('article').props()['aria-label'],
+        'New annotation by Richard Lionheart'
+      );
+    });
   });
 
   describe('annotation quote', () => {

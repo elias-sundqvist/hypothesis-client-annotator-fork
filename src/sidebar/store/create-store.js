@@ -95,13 +95,6 @@ function createReducer(reducers) {
       return state;
     }
     const stateChanges = reducer(state, action);
-
-    // Some modules return an array rather than an object. They need to be
-    // handled differently so we don't convert them to an object.
-    if (Array.isArray(stateChanges)) {
-      return stateChanges;
-    }
-
     return {
       ...state,
       ...stateChanges,
@@ -133,8 +126,8 @@ function bindSelectors(selectors, getState) {
 /**
  * `Object.assign` wrapper that checks for overwriting properties in debug builds.
  *
- * @template T
- * @template U
+ * @template {object} T
+ * @template {object} U
  * @param {T} target
  * @param {U} source
  */
@@ -286,7 +279,9 @@ export function makeAction(reducers, type, payload) {
  * @template Actions
  * @template {SelectorMap<State>} Selectors
  * @template [RootSelectors={}]
- * @param {State | ((...args: any[]) => State)} initialState
+ * @param {State | ((...args: any[]) => State)} initialState - Object containing
+ *   the initial state for the module, or a function which returns such an
+ *   object. The arguments come from the {@link createStore} call.
  * @param {object} config
  *   @param {string} config.namespace -
  *     The key under which this module's state will live in the store's root state

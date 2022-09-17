@@ -72,7 +72,7 @@ describe('Adder', () => {
   it('renders the adder toolbar into a shadow root', () => {
     const shadowRoot = getContent(adder);
     assert.exists(shadowRoot);
-    assert.exists(shadowRoot.querySelector('.AdderToolbar'));
+    assert.exists(shadowRoot.querySelector('[data-component="AdderToolbar"]'));
   });
 
   describe('button and shortcut handling', () => {
@@ -116,6 +116,23 @@ describe('Adder', () => {
       const showBtn = getButton('Show');
       assert.ok(showBtn, '"Show" button not visible');
       assert.equal(showBtn.querySelector('span').textContent, '2');
+    });
+
+    it('updates "Show" button when `annotationsForSelection` changes', () => {
+      adder.show(rect(100, 200, 100, 20), false);
+
+      adder.annotationsForSelection = [];
+      let showButton = getButton('Show');
+      assert.notOk(showButton);
+
+      adder.annotationsForSelection = [{ $tag: '123' }, { $tag: '456' }];
+      showButton = getButton('Show');
+      assert.ok(showButton);
+      assert.include(showButton.textContent, '2');
+
+      adder.annotationsForSelection = [];
+      showButton = getButton('Show');
+      assert.notOk(showButton);
     });
 
     it('calls onShowAnnotations callback when Show button is clicked', () => {

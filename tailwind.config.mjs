@@ -6,12 +6,12 @@ const focusBlue = '#59a7e8';
 export default {
   presets: [tailwindConfig],
   content: [
-    './src/sidebar/components/**/*.js',
-    './src/annotator/components/**/*.js',
-    './dev-server/ui-playground/components/**/*.js',
-    './node_modules/@hypothesis/frontend-shared/lib/**/*.js',
+    './src/sidebar/components/**/*.{js,ts,tsx}',
+    './src/annotator/components/**/*.{js,ts,tsx}',
+    './dev-server/ui-playground/components/**/*.{js,ts,tsx}',
+    './node_modules/@hypothesis/frontend-shared/lib/**/*.{js,ts,tsx}',
     // This module references `sidebar-frame` and related classes
-    './src/annotator/sidebar.js',
+    './src/annotator/sidebar.{js,ts,tsx}',
   ],
   theme: {
     extend: {
@@ -32,7 +32,6 @@ export default {
         px: '4px',
       },
       boxShadow: {
-        DEFAULT: '0 1px 1px rgba(0, 0, 0, 0.1)',
         'adder-toolbar': '0px 2px 10px 0px rgba(0, 0, 0, 0.25)',
         focus: `0 0 0 2px ${focusBlue}`,
         'focus-inner': `inset 0 0 0 2px ${focusBlue}`,
@@ -40,21 +39,19 @@ export default {
         sidebar: '0px 1px 4px rgb(0, 0, 0, 0.5)',
       },
       colors: {
-        'color-text': {
-          inverted: '#f2f2f2',
-        },
         blue: {
-          focus: focusBlue,
           quote: '#58cef4',
         },
       },
       // Content in the sidebar should never exceed a max-width of `768px`, and
       // that content should be auto-centered
+      // See https://tailwindcss.com/docs/container
       container: {
         center: true,
         // Horizontal padding is larger for wider screens
         padding: {
-          DEFAULT: '0.5rem',
+          // Precise horizontal padding for annotation-card alignment
+          DEFAULT: '9px',
           lg: '4rem',
         },
         // By default, tailwind will provide appropriately-sized containers at
@@ -91,12 +88,13 @@ export default {
         xl: ['16px'],
         '2xl': ['18px'],
         'touch-base': ['16px', '1.4'], // Used for touch interfaces in certain UIs
-        // rem-based font sizes for annotator controls that should scale
-        // with text scaling in the underlying document
-        'annotator-sm': ['0.75rem'],
-        'annotator-base': ['0.875rem'],
-        'annotator-lg': ['1rem'],
-        'annotator-xl': ['1.125rem'],
+        // Font sizes for annotator controls that should scale with text in the
+        // document. These can only be used within shadow roots that include the
+        // annotator.css bundle.
+        'annotator-sm': ['calc(0.75 * var(--hypothesis-font-size))'],
+        'annotator-base': ['calc(0.875 * var(--hypothesis-font-size))'],
+        'annotator-lg': ['var(--hypothesis-font-size)'],
+        'annotator-xl': ['calc(1.125 * var(--hypothesis-font-size))'],
         // These are known cases when we want absolute sizing for fonts so
         // that they do not scale, for example annotator components that are
         // rendered next to the sidebar (which doesn't scale with host root
@@ -173,6 +171,8 @@ export default {
         sm: '360px',
         md: '480px',
         lg: '768px',
+        xl: '1024px',
+        '2xl': '1220px',
         // Narrow mobile screens
         'annotator-sm': '240px',
         // Wider mobile screens/small tablets
@@ -190,13 +190,6 @@ export default {
         'px-1.5': '6px',
         'px-2': '8px',
       },
-      zIndex: {
-        1: '1',
-        2: '2',
-        3: '3',
-        4: '4',
-        max: '2147483647',
-      },
     },
   },
   plugins: [
@@ -207,7 +200,7 @@ export default {
       // sub-components to select for that state.
       addVariant('sidebar-collapsed', '.sidebar-collapsed &');
     }),
-    plugin(({ addUtilities }) => {
+    plugin(({ addComponents, addUtilities }) => {
       // Tailwind does not provide hyphens-related utility classes.
       addUtilities({
         '.hyphens-none': {
@@ -215,6 +208,14 @@ export default {
         },
         '.hyphens-auto': {
           hyphens: 'auto',
+        },
+      });
+      addComponents({
+        // Add a custom class to set all properties to initial values. Used
+        // within shadow DOMs. This must be on the components layer such that it
+        // gets applied "before" utility classes.
+        '.all-initial': {
+          all: 'initial',
         },
       });
     }),

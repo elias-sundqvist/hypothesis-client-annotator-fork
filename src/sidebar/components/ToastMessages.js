@@ -16,7 +16,9 @@ import { withServices } from '../service-context';
 
 /**
  * An individual toast message: a brief and transient success or error message.
- * The message may be dismissed by clicking on it.
+ * The message may be dismissed by clicking on it. `visuallyHidden` toast
+ * messages will not be visible but are still available to screen readers.
+ *
  * Otherwise, the `toastMessenger` service handles removing messages after a
  * certain amount of time.
  *
@@ -42,6 +44,7 @@ function ToastMessage({ message, onDismiss }) {
     /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */
     <Card
       classes={classnames('p-0 flex border', {
+        'sr-only': message.visuallyHidden,
         'border-red-error': message.type === 'error',
         'border-yellow-notice': message.type === 'notice',
         'border-green-success': message.type === 'success',
@@ -114,13 +117,20 @@ function ToastMessages({ toastMessenger }) {
       <ul
         aria-live="polite"
         aria-relevant="additions"
-        className="absolute z-2 left-0 w-full space-y-2"
+        className="absolute z-2 left-0 w-full"
       >
         {messages.map(message => (
           <li
             className={classnames(
               'relative w-full container hover:cursor-pointer',
               {
+                // Add a bottom margin to visible messages only. Typically we'd
+                // use a `space-y-2` class on the parent to space children.
+                // Doing that here could cause an undesired top margin on
+                // the first visible message in a list that contains (only)
+                // visually-hidden messages before it.
+                // See https://tailwindcss.com/docs/space#limitations
+                'mb-2': !message.visuallyHidden,
                 // Slide in from right in narrow viewports; fade in in
                 // larger viewports to toast message isn't flying too far
                 'motion-safe:animate-slide-in-from-right lg:animate-fade-in':

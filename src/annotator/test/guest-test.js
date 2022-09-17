@@ -1,3 +1,5 @@
+import { TinyEmitter } from 'tiny-emitter';
+
 import { delay } from '../../test-util/wait';
 import { Guest, $imports } from '../guest';
 
@@ -126,7 +128,7 @@ describe('Guest', () => {
 
     fakeFrameFillsAncestor = sinon.stub().returns(true);
 
-    fakeIntegration = {
+    fakeIntegration = Object.assign(new TinyEmitter(), {
       anchor: sinon.stub(),
       canAnnotate: sinon.stub().returns(true),
       contentContainer: sinon.stub().returns({}),
@@ -138,8 +140,9 @@ describe('Guest', () => {
         documentFingerprint: 'test-fingerprint',
       }),
       scrollToAnchor: sinon.stub().resolves(),
+      showContentInfo: sinon.stub(),
       uri: sinon.stub().resolves('https://example.com/test.pdf'),
-    };
+    });
 
     fakeCreateIntegration = sinon.stub().returns(fakeIntegration);
 
@@ -489,6 +492,26 @@ describe('Guest', () => {
           some_flag: true,
           other_flag: false,
         });
+      });
+    });
+
+    describe('on "showContentInfo" event', () => {
+      const contentInfo = {
+        logo: {},
+        item: { title: 'Some article' },
+        links: {},
+      };
+
+      it('triggers display of content info in integration', () => {
+        createGuest();
+        emitSidebarEvent('showContentInfo', contentInfo);
+        assert.calledWith(fakeIntegration.showContentInfo, contentInfo);
+      });
+
+      it('does nothing if integration does not support content info display', () => {
+        createGuest();
+        fakeIntegration.showContentInfo = null;
+        emitSidebarEvent('showContentInfo', contentInfo);
       });
     });
   });
@@ -1267,20 +1290,23 @@ describe('Guest', () => {
     assert.calledWith(sidebarRPC().connect, port1);
   });
 
-  it('passes configuration to integration', () => {
+  it('creates integration', () => {
+    createGuest();
+    assert.calledOnce(fakeCreateIntegration);
+  });
+
+  it('shows content info banner if `contentInfoBanner` configuration is set', () => {
     const config = {
-      // Configuration options that should be forwarded to the integration
-      contentPartner: 'jstor',
-      // Other configuration
-      otherOption: 'test',
+      contentInfoBanner: {},
     };
 
-    const guest = createGuest(config);
+    createGuest(config);
 
-    assert.calledOnce(fakeCreateIntegration);
-    assert.calledWith(fakeCreateIntegration, guest, {
-      contentPartner: 'jstor',
-    });
+    assert.calledOnce(fakeIntegration.showContentInfo);
+    assert.calledWith(
+      fakeIntegration.showContentInfo,
+      config.contentInfoBanner
+    );
   });
 
   it('configures the BucketBarClient', () => {
@@ -1303,6 +1329,38 @@ describe('Guest', () => {
       metadata: {
         title: 'Test title',
         documentFingerprint: 'test-fingerprint',
+      },
+      frameIdentifier: null,
+    });
+  });
+
+  it('sends new document metadata and URIs to sidebar after a client-side navigation', async () => {
+    fakeIntegration.uri.resolves('https://example.com/page-1');
+    fakeIntegration.getMetadata.resolves({ title: 'Page 1' });
+
+    createGuest();
+    const sidebarRPCCall = sidebarRPC().call;
+    await delay(0);
+
+    assert.calledWith(sidebarRPCCall, 'documentInfoChanged', {
+      uri: 'https://example.com/page-1',
+      metadata: {
+        title: 'Page 1',
+      },
+      frameIdentifier: null,
+    });
+
+    sidebarRPCCall.resetHistory();
+    fakeIntegration.uri.resolves('https://example.com/page-2');
+    fakeIntegration.getMetadata.resolves({ title: 'Page 2' });
+
+    fakeIntegration.emit('uriChanged');
+    await delay(0);
+
+    assert.calledWith(sidebarRPCCall, 'documentInfoChanged', {
+      uri: 'https://example.com/page-2',
+      metadata: {
+        title: 'Page 2',
       },
       frameIdentifier: null,
     });

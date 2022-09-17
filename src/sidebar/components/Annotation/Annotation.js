@@ -1,8 +1,15 @@
 import { Actions, Spinner } from '@hypothesis/frontend-shared';
 import classnames from 'classnames';
+import { useMemo } from 'preact/hooks';
 
 import { useSidebarStore } from '../../store';
-import { isOrphan, isSaved, quote } from '../../helpers/annotation-metadata';
+import {
+  annotationRole,
+  isOrphan,
+  isSaved,
+  quote,
+} from '../../helpers/annotation-metadata';
+import { annotationDisplayName } from '../../helpers/annotation-user';
 import { withServices } from '../../service-context';
 
 import AnnotationActionBar from './AnnotationActionBar';
@@ -78,14 +85,30 @@ function Annotation({
 
   const showActions = !isSaving && !isEditing && isSaved(annotation);
 
+  const defaultAuthority = store.defaultAuthority();
+  const displayNamesEnabled = store.isFeatureEnabled('client_display_names');
+
   const onReply = () => {
     if (isSaved(annotation) && userid) {
       annotationsService.reply(annotation, userid);
     }
   };
 
+  const authorName = useMemo(
+    () =>
+      annotationDisplayName(annotation, defaultAuthority, displayNamesEnabled),
+    [annotation, defaultAuthority, displayNamesEnabled]
+  );
+
+  const annotationDescription = isSaved(annotation)
+    ? annotationRole(annotation)
+    : `New ${annotationRole(annotation).toLowerCase()}`;
+
   return (
-    <article className="space-y-4">
+    <article
+      className="space-y-4"
+      aria-label={`${annotationDescription} by ${authorName}`}
+    >
       <AnnotationHeader
         annotation={annotation}
         isEditing={isEditing}

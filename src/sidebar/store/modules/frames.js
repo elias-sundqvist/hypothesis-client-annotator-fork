@@ -8,6 +8,7 @@ import shallowEqual from 'shallowequal';
 import { createStoreModule, makeAction } from '../create-store';
 
 /**
+ * @typedef {import('../../../types/annotator').ContentInfoConfig} ContentInfoConfig
  * @typedef {import('../../../types/annotator').DocumentMetadata} DocumentMetadata
  */
 
@@ -20,8 +21,18 @@ import { createStoreModule, makeAction } from '../create-store';
  * @prop {boolean} [isAnnotationFetchComplete]
  */
 
-/** @type {Frame[]} */
-const initialState = [];
+const initialState = {
+  /** @type {Frame[]} */
+  frames: [],
+
+  /**
+   * Data for the content information banner shown above the content in the main
+   * guest frame.
+   *
+   * @type {ContentInfoConfig|null}
+   */
+  contentInfo: null,
+};
 
 /** @typedef {typeof initialState} State */
 
@@ -31,7 +42,16 @@ const reducers = {
    * @param {{ frame: Frame }} action
    */
   CONNECT_FRAME(state, action) {
-    return [...state, action.frame];
+    const frameIndex = state.frames.findIndex(
+      frame => frame.id === action.frame.id
+    );
+    const newFrames = [...state.frames];
+    if (frameIndex !== -1) {
+      newFrames[frameIndex] = action.frame;
+    } else {
+      newFrames.push(action.frame);
+    }
+    return { frames: newFrames };
   },
 
   /**
@@ -39,7 +59,8 @@ const reducers = {
    * @param {{ frame: Frame }} action
    */
   DESTROY_FRAME(state, action) {
-    return state.filter(f => f !== action.frame);
+    const frames = state.frames.filter(f => f !== action.frame);
+    return { frames };
   },
 
   /**
@@ -47,7 +68,7 @@ const reducers = {
    * @param {{ uri: string, isAnnotationFetchComplete: boolean }} action
    */
   UPDATE_FRAME_ANNOTATION_FETCH_STATUS(state, action) {
-    const frames = state.map(frame => {
+    const frames = state.frames.map(frame => {
       const match = frame.uri && frame.uri === action.uri;
       if (match) {
         return Object.assign({}, frame, {
@@ -57,12 +78,23 @@ const reducers = {
         return frame;
       }
     });
-    return frames;
+    return { frames };
+  },
+
+  /**
+   * @param {State} state
+   * @param {{ info: ContentInfoConfig }} action
+   */
+  SET_CONTENT_INFO(state, action) {
+    return { contentInfo: action.info };
   },
 };
 
 /**
- * Add a frame to the list of frames currently connected to the sidebar app.
+ * Add or replace a frame in the list of connected frames.
+ *
+ * If a frame exists with the same ID as `frame` it is replaced, otherwise
+ * a new frame is added.
  *
  * @param {Frame} frame
  */
@@ -71,7 +103,7 @@ function connectFrame(frame) {
 }
 
 /**
- * Remove a frame from the list of frames currently connected to the sidebar app.
+ * Remove a frame from the list of connected frames.
  *
  * @param {Frame} frame
  */
@@ -92,13 +124,18 @@ function updateFrameAnnotationFetchStatus(uri, isFetchComplete) {
   });
 }
 
+/** @param {ContentInfoConfig} info */
+function setContentInfo(info) {
+  return makeAction(reducers, 'SET_CONTENT_INFO', { info });
+}
+
 /**
  * Return the list of frames currently connected to the sidebar app.
  *
  * @param {State} state
  */
 function frames(state) {
-  return state;
+  return state.frames;
 }
 
 /**
@@ -113,7 +150,7 @@ function frames(state) {
  */
 const mainFrame = createSelector(
   /** @param {State} state */
-  state => state,
+  state => state.frames,
 
   // Sub-frames will all have a "frame identifier" set. The main frame is the
   // one with a `null` id.
@@ -154,14 +191,19 @@ const createShallowEqualSelector = createSelectorCreator(
  * values of the array change (are not shallow-equal).
  */
 const searchUris = createShallowEqualSelector(
-  /** @param {State} frames */
-  frames =>
-    frames.reduce(
+  /** @param {State} state */
+  state =>
+    state.frames.reduce(
       (uris, frame) => uris.concat(searchUrisForFrame(frame)),
       /** @type {string[]} */ ([])
     ),
   uris => uris
 );
+
+/** @param {State} state */
+function getContentInfo(state) {
+  return state.contentInfo;
+}
 
 export const framesModule = createStoreModule(initialState, {
   namespace: 'frames',
@@ -170,10 +212,12 @@ export const framesModule = createStoreModule(initialState, {
   actionCreators: {
     connectFrame,
     destroyFrame,
+    setContentInfo,
     updateFrameAnnotationFetchStatus,
   },
 
   selectors: {
+    getContentInfo,
     frames,
     mainFrame,
     searchUris,

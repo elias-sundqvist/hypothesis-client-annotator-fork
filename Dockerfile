@@ -3,10 +3,11 @@
 # upgrade everything by simply updating the Alpine version.
 #
 # Alpine is updated every 6 months so all packages are pretty recent.
-FROM alpine:3.13
+FROM alpine:3.16
 
 RUN apk update && apk add --no-cache \
   chromium \
+  icu-data-full \
   git \
   make \
   nodejs \
