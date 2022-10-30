@@ -3,6 +3,7 @@ import escapeHtml from 'escape-html';
 import katex from 'katex';
 import showdown from 'showdown';
 
+
 const DOMPurify = createDOMPurify(window);
 
 // Ensure that any links generated either by Showdown or in the markdown/HTML
@@ -25,6 +26,7 @@ function targetBlank() {
 let converter;
 
 /** @param {string} markdown */
+// @ts-ignore
 function renderMarkdown(markdown) {
   if (!converter) {
     // see https://github.com/showdownjs/showdown#valid-options
@@ -64,6 +66,7 @@ function mathPlaceholder(id) {
  * @param {string} content
  * @return {{ content: string, mathBlocks: MathBlock[]}}
  */
+// @ts-ignore
 function extractMath(content) {
   /** @type {MathBlock[]} */
   const mathBlocks = [];
@@ -132,6 +135,7 @@ function extractMath(content) {
  * @param {string} html
  * @param {MathBlock[]} mathBlocks
  */
+// @ts-ignore
 function insertMath(html, mathBlocks) {
   return mathBlocks.reduce((html, block) => {
     let renderedMath;
@@ -154,5 +158,6 @@ function insertMath(html, mathBlocks) {
  * @param {string} markdown
  */
 export function renderMathAndMarkdown(markdown) {
+  // @ts-ignore
   return window['renderObsidianMarkdown'](markdown);
 }

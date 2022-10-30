@@ -174,6 +174,16 @@ function startApp(settings, appEl) {
   container.run(startRPCServer);
   container.run(setupFrameSync);
 
+  // @ts-ignore
+  top?.window.app.plugins.getPlugin("obsidian-annotator").styleObserver.listen(style=> {
+    if (document.getElementById("obsidianStyles")) {
+      // @ts-ignore
+      document.getElementById("obsidianStyles").innerHTML = style;
+    } else {
+      document.head.innerHTML += `<style id="obsidianStyles">${style}</style>`
+    }
+  });
+
   // Render the UI.
   render(
     <ServiceContext.Provider value={container}>
