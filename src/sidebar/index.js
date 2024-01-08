@@ -180,7 +180,10 @@ function startApp(settings, appEl) {
       // @ts-ignore
       document.getElementById("obsidianStyles").innerHTML = style;
     } else {
-      document.head.innerHTML += `<style id="obsidianStyles">${style}</style>`
+      let styleElement = document.createElement("style");
+      styleElement.id = "obsidianStyles";
+      styleElement.textContent = style; // 'style' being the CSS you want to insert
+      document.head.appendChild(styleElement);
     }
   });
 
